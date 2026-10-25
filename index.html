@@ -1,0 +1,315 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1.0"/>
+<title>FX Signal Dashboard</title>
+<style>
+  :root { --bg:#0f1115; --card:#181b22; --text:#e6e8ec; --muted:#8a93a6; --buy:#22c55e; --sell:#ef4444; --neutral:#f59e0b; }
+  * { box-sizing:border-box; }
+  body { margin:0; font-family:system-ui,-apple-system,Segoe UI,Roboto,sans-serif; background:var(--bg); color:var(--text); padding:24px; }
+  h1 { font-size:20px; margin:0 0 4px; }
+  .sub { color:var(--muted); font-size:13px; margin-bottom:20px; }
+  .grid { display:grid; grid-template-columns:repeat(auto-fit,minmax(280px,1fr)); gap:16px; }
+  .card { background:var(--card); border-radius:12px; padding:16px; border:1px solid #222633; }
+  .pair { font-size:18px; font-weight:600; }
+  .price { font-size:22px; margin:6px 0; font-variant-numeric:tabular-nums; }
+  .row { display:flex; justify-content:space-between; font-size:13px; color:var(--muted); margin:4px 0; }
+  .row span:last-child { color:var(--text); }
+  .signal { margin-top:12px; padding:10px; border-radius:8px; text-align:center; font-weight:700; letter-spacing:.5px; }
+  .BUY  { background:rgba(34,197,94,.15); color:var(--buy); }
+  .SELL { background:rgba(239,68,68,.15); color:var(--sell); }
+  .NEUTRAL { background:rgba(245,158,11,.15); color:var(--neutral); }
+  .conf { font-size:12px; color:var(--muted); text-align:center; margin-top:6px; }
+  .controls { display:flex; gap:10px; margin-bottom:16px; flex-wrap:wrap; }
+  button { background:#2563eb; color:#fff; border:0; padding:10px 16px; border-radius:8px; cursor:pointer; font-weight:600; }
+  button:disabled { opacity:.5; cursor:not-allowed; }
+  .news { margin-top:16px; font-size:13px; color:var(--muted); }
+  .badge { display:inline-block; padding:2px 8px; border-radius:999px; font-size:11px; background:#222633; color:var(--muted); margin-left:6px; }
+</style>
+</head>
+<body>
+
+<h1>FX Signal Dashboard</h1>
+<div class="sub">
+  Volatility-filtered pairs · EMA trend · RSI momentum · ADX strength · News calendar block<br/>
+  <strong>Not financial advice.</strong> Signals are decision-support only. Trade at your own risk.
+</div>
+
+<div class="controls">
+  <button id="refresh">Refresh Signals</button>
+  <span class="badge" id="status">idle</span>
+</div>
+
+<div class="grid" id="cards"></div>
+
+<div class="news" id="newsBox"></div>
+
+<script>
+/* ------------------------------------------------------------------
+   CONFIG
+------------------------------------------------------------------ */
+const PAIRS = [
+  { symbol: "EURGBP", label: "EUR/GBP", twelvedata: "EUR/GBP" },
+  { symbol: "EURCHF", label: "EUR/CHF", twelvedata: "EUR/CHF" },
+  { symbol: "GBPCHF", label: "GBP/CHF", twelvedata: "GBP/CHF" },
+  { symbol: "AUDNZD", label: "AUD/NZD", twelvedata: "AUD/NZD" },
+  { symbol: "USDCHF", label: "USD/CHF", twelvedata: "USD/CHF" },
+];
+
+// Replace with your free key from twelvedata.com (free tier = 8 req/min, 800/day)
+const TWELVE_DATA_KEY = "YOUR_TWELVEDATA_API_KEY";
+
+const ATR_PERIOD = 14;
+const EMA_FAST   = 20;
+const EMA_SLOW   = 50;
+const RSI_PERIOD = 14;
+const ADX_PERIOD = 14;
+
+/* ------------------------------------------------------------------
+   INDICATORS (pure JS)
+------------------------------------------------------------------ */
+function ema(values, period) {
+  const k = 2 / (period + 1);
+  let prev = values.slice(0, period).reduce((a,b)=>a+b,0) / period;
+  const out = [prev];
+  for (let i = period; i < values.length; i++) {
+    prev = values[i] * k + prev * (1 - k);
+    out.push(prev);
+  }
+  return out; // length = values.length - period + 1
+}
+
+function rsi(closes, period = 14) {
+  let gains = 0, losses = 0;
+  for (let i = 1; i <= period; i++) {
+    const d = closes[i] - closes[i-1];
+    if (d >= 0) gains += d; else losses -= d;
+  }
+  let avgGain = gains / period, avgLoss = losses / period;
+  const out = [];
+  for (let i = period + 1; i < closes.length; i++) {
+    const d = closes[i] - closes[i-1];
+    const g = d > 0 ? d : 0, l = d < 0 ? -d : 0;
+    avgGain = (avgGain * (period-1) + g) / period;
+    avgLoss = (avgLoss * (period-1) + l) / period;
+    const rs = avgLoss === 0 ? 100 : avgGain / avgLoss;
+    out.push(100 - 100 / (1 + rs));
+  }
+  return out;
+}
+
+function atr(highs, lows, closes, period = 14) {
+  const trs = [];
+  for (let i = 1; i < closes.length; i++) {
+    trs.push(Math.max(
+      highs[i] - lows[i],
+      Math.abs(highs[i] - closes[i-1]),
+      Math.abs(lows[i] - closes[i-1])
+    ));
+  }
+  let prev = trs.slice(0, period).reduce((a,b)=>a+b,0) / period;
+  const out = [prev];
+  for (let i = period; i < trs.length; i++) {
+    prev = (prev * (period-1) + trs[i]) / period;
+    out.push(prev);
+  }
+  return out;
+}
+
+function adx(highs, lows, closes, period = 14) {
+  const plusDM = [], minusDM = [], trs = [];
+  for (let i = 1; i < closes.length; i++) {
+    const up = highs[i] - highs[i-1];
+    const dn = lows[i-1] - lows[i];
+    plusDM.push(up > dn && up > 0 ? up : 0);
+    minusDM.push(dn > up && dn > 0 ? dn : 0);
+    trs.push(Math.max(
+      highs[i] - lows[i],
+      Math.abs(highs[i] - closes[i-1]),
+      Math.abs(lows[i] - closes[i-1])
+    ));
+  }
+  const smooth = (arr) => {
+    let prev = arr.slice(0, period).reduce((a,b)=>a+b,0);
+    const out = [prev];
+    for (let i = period; i < arr.length; i++) {
+      prev = prev - prev/period + arr[i];
+      out.push(prev);
+    }
+    return out;
+  };
+  const trS = smooth(trs), pS = smooth(plusDM), mS = smooth(minusDM);
+  const pDI = pS.map((v,i)=> 100 * v / trS[i]);
+  const mDI = mS.map((v,i)=> 100 * v / trS[i]);
+  const dx = pDI.map((v,i)=> 100 * Math.abs(v - mDI[i]) / (v + mDI[i] || 1));
+  const adxArr = smooth(dx).map(v => v / period);
+  return adxArr;
+}
+
+/* ------------------------------------------------------------------
+   DATA FETCH (Twelve Data free tier)
+------------------------------------------------------------------ */
+async function fetchSeries(pair) {
+  const url = `https://api.twelvedata.com/time_series?symbol=${encodeURIComponent(pair.twelvedata)}&interval=15min&outputsize=200&apikey=${TWELVE_DATA_KEY}`;
+  const res = await fetch(url);
+  const json = await res.json();
+  if (json.status === "error" || !json.values) {
+    throw new Error(json.message || "Data fetch failed");
+  }
+  // Twelve Data returns newest first — reverse to chronological
+  const rows = json.values.slice().reverse();
+  return {
+    closes: rows.map(r => parseFloat(r.close)),
+    highs:  rows.map(r => parseFloat(r.high)),
+    lows:   rows.map(r => parseFloat(r.low)),
+    last:   parseFloat(rows[rows.length-1].close),
+  };
+}
+
+/* ------------------------------------------------------------------
+   SIGNAL LOGIC
+   - Trend:   EMA20 vs EMA50 vs price
+   - Momentum: RSI
+   - Strength: ADX (>25 = trending)
+   - Volatility: ATR — used to pick the 3 lowest-volatility pairs
+   Confidence = weighted score of how many filters agree
+------------------------------------------------------------------ */
+function evaluate(series) {
+  const { closes, highs, lows } = series;
+  const eFast = ema(closes, EMA_FAST);
+  const eSlow = ema(closes, EMA_SLOW);
+  const rsiArr = rsi(closes, RSI_PERIOD);
+  const atrArr = atr(highs, lows, closes, ATR_PERIOD);
+  const adxArr = adx(highs, lows, closes, ADX_PERIOD);
+
+  const fast = eFast[eFast.length-1];
+  const slow = eSlow[eSlow.length-1];
+  const r    = rsiArr[rsiArr.length-1];
+  const a    = atrArr[atrArr.length-1];
+  const d    = adxArr[adxArr.length-1];
+  const price = closes[closes.length-1];
+
+  let score = 0; // -4 .. +4 bullish/bearish
+  if (price > fast) score++;
+  if (fast > slow) score++;
+  if (r > 50) score++;
+  if (d > 25) score++; // trend strength boosts, direction from above
+
+  let signal = "NEUTRAL";
+  if (score >= 3) signal = "BUY";
+  else if (score <= 1) signal = "SELL";
+
+  const confidence = Math.min(95, Math.round((Math.abs(score) / 4) * 100));
+
+  return {
+    signal, confidence,
+    price,
+    atr: a,
+    atrPct: (a / price) * 100,
+    rsi: r,
+    adx: d,
+    emaFast: fast,
+    emaSlow: slow,
+  };
+}
+
+/* ------------------------------------------------------------------
+   NEWS FILTER (simple, client-side, via free public calendar)
+   We block signals if a high-impact event is within ±2 hours.
+   Using a free public endpoint — replace with your own proxy if needed.
+------------------------------------------------------------------ */
+async function highImpactNewsNear() {
+  // Free public economic calendar (no key). If it fails, we do NOT block.
+  try {
+    const res = await fetch("https://nfs.faireconomy.media/ff_calendar_thisweek.json");
+    const events = await res.json();
+    const now = Date.now();
+    const window = 2 * 60 * 60 * 1000;
+    return events.filter(e => {
+      const t = new Date(e.date).getTime();
+      return e.impact === "High" && Math.abs(t - now) < window;
+    });
+  } catch {
+    return [];
+  }
+}
+
+/* ------------------------------------------------------------------
+   RENDER
+------------------------------------------------------------------ */
+const cardsEl = document.getElementById("cards");
+const statusEl = document.getElementById("status");
+const newsEl = document.getElementById("newsBox");
+
+function renderCard(pair, data, blocked) {
+  const cls = blocked ? "NEUTRAL" : data.signal;
+  const html = `
+    <div class="card">
+      <div class="pair">${pair.label}</div>
+      <div class="price">${data.price.toFixed(4)}</div>
+      <div class="row"><span>ATR (vol)</span><span>${data.atr.toFixed(4)} (${data.atrPct.toFixed(2)}%)</span></div>
+      <div class="row"><span>RSI</span><span>${data.rsi.toFixed(1)}</span></div>
+      <div class="row"><span>ADX</span><span>${data.adx.toFixed(1)}</span></div>
+      <div class="row"><span>EMA20 / EMA50</span><span>${data.emaFast.toFixed(4)} / ${data.emaSlow.toFixed(4)}</span></div>
+      <div class="signal ${cls}">${blocked ? "BLOCKED · NEWS" : data.signal}</div>
+      <div class="conf">Confidence: ${data.confidence}%</div>
+    </div>`;
+  cardsEl.insertAdjacentHTML("beforeend", html);
+}
+
+async function refresh() {
+  statusEl.textContent = "loading…";
+  document.getElementById("refresh").disabled = true;
+  cardsEl.innerHTML = "";
+  newsEl.textContent = "";
+
+  if (TWELVE_DATA_KEY === "YOUR_TWELVEDATA_API_KEY") {
+    statusEl.textContent = "missing API key";
+    cardsEl.innerHTML = `<div class="card">Add your Twelve Data API key at the top of the script to load live data.</div>`;
+    document.getElementById("refresh").disabled = false;
+    return;
+  }
+
+  try {
+    // Fetch all pairs
+    const results = await Promise.all(
+      PAIRS.map(async p => {
+        try {
+          const s = await fetchSeries(p);
+          const e = evaluate(s);
+          return { pair: p, ...e };
+        } catch (err) {
+          return { pair: p, error: err.message };
+        }
+      })
+    );
+
+    // Pick the 3 lowest-volatility pairs (lowest ATR%)
+    const valid = results.filter(r => !r.error);
+    valid.sort((a,b) => a.atrPct - b.atrPct);
+    const top3 = valid.slice(0, 3);
+
+    // News check once
+    const news = await highImpactNewsNear();
+    const blockedByNews = news.length > 0;
+    if (blockedByNews) {
+      newsEl.innerHTML = `⚠️ High-impact news within 2h: <strong>${news.map(n=>n.title).join(", ")}</strong>. All signals blocked.`;
+    } else {
+      newsEl.textContent = "✅ No high-impact news in the next/past 2 hours.";
+    }
+
+    top3.forEach(r => renderCard(r.pair, r, blockedByNews));
+    statusEl.textContent = `updated ${new Date().toLocaleTimeString()} · showing 3 lowest-vol pairs`;
+  } catch (e) {
+    statusEl.textContent = "error: " + e.message;
+  } finally {
+    document.getElementById("refresh").disabled = false;
+  }
+}
+
+document.getElementById("refresh").addEventListener("click", refresh);
+refresh();
+</script>
+</body>
+</html>
