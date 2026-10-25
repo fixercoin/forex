@@ -120,7 +120,7 @@ function adx(candles, period = 14) {
    FETCH
 ------------------------------------------------------------------ */
 async function fetchSeries(pair) {
-  const url = `https://api.twelvedata.com/time_series?symbol=${encodeURIComponent(pair.symbol)}&interval=15min&outputsize=200&apikey=${TWELVE_DATA_KEY}`;
+  const url = `https://api.twelvedata.com/time_series?symbol=${encodeURIComponent(pair.symbol)}&interval=15min&outputsize=200&apikey=${1d6484a8e4204e15ac6e63de1192a73e}`;
   const res = await fetch(url);
   const json = await res.json();
   if (json.status === "error") throw new Error(json.message || "API error");
