@@ -3,12 +3,74 @@
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0"/>
-<title>FX Signal Dashboard</title>
+<title>FIXORIUM AI SIGNAL</title>
 <style>
   body { margin:0; font-family:system-ui,sans-serif; background:#0f1115; color:#e6e8ec; padding:24px; }
-  h1 { font-size:20px; margin:0 0 4px; }
-  .sub { color:#8a93a6; font-size:13px; margin-bottom:20px; }
-  .grid { display:grid; grid-template-columns:repeat(auto-fit,minmax(280px,1fr)); gap:16px; }
+
+  .header-row {
+    display:flex;
+    align-items:center;
+    justify-content:space-between;
+    gap:12px;
+    margin-bottom:12px;
+  }
+  h1 { font-size:22px; margin:0; letter-spacing:.5px; }
+
+  .icon-btn {
+    background:transparent;
+    color:#e6e8ec;
+    border:0;
+    width:42px;
+    height:42px;
+    border-radius:50%;
+    cursor:pointer;
+    display:flex;
+    align-items:center;
+    justify-content:center;
+    transition:color .2s;
+    flex-shrink:0;
+    padding:0;
+  }
+  .icon-btn:hover { color:#2563eb; }
+  .icon-btn:disabled { opacity:.5; cursor:not-allowed; }
+  .icon-btn.spinning svg { animation:spin 1s linear infinite; }
+  @keyframes spin { to { transform:rotate(360deg); } }
+
+  .marquee-bar {
+    position:sticky;
+    top:0;
+    z-index:10;
+    background:#181b22;
+    border:1px solid #222633;
+    border-radius:8px;
+    overflow:hidden;
+    margin-bottom:20px;
+    padding:8px 0;
+  }
+  .marquee-track {
+    display:inline-block;
+    white-space:nowrap;
+    padding-left:100%;
+    animation:marquee 25s linear infinite;
+    font-size:13px;
+    color:#8a93a6;
+  }
+  .marquee-track strong { color:#e6e8ec; }
+  @keyframes marquee {
+    from { transform:translateX(0); }
+    to   { transform:translateX(-100%); }
+  }
+
+  /* Strict 3-column grid */
+  .grid {
+    display:grid;
+    grid-template-columns:repeat(3, 1fr);
+    gap:16px;
+  }
+  @media (max-width: 900px) {
+    .grid { grid-template-columns:1fr; }
+  }
+
   .card { background:#181b22; border-radius:12px; padding:16px; border:1px solid #222633; }
   .pair { font-size:18px; font-weight:600; }
   .price { font-size:22px; margin:6px 0; font-variant-numeric:tabular-nums; }
@@ -18,33 +80,46 @@
   .BUY { background:rgba(34,197,94,.15); color:#22c55e; }
   .SELL { background:rgba(239,68,68,.15); color:#ef4444; }
   .NEUTRAL { background:rgba(245,158,11,.15); color:#f59e0b; }
-  .ERR { background:rgba(239,68,68,.15); color:#ef4444; font-size:12px; }
   .conf { font-size:12px; color:#8a93a6; text-align:center; margin-top:6px; }
-  button { background:#2563eb; color:#fff; border:0; padding:10px 16px; border-radius:8px; cursor:pointer; font-weight:600; }
-  button:disabled { opacity:.5; cursor:not-allowed; }
+
   .badge { display:inline-block; padding:2px 8px; border-radius:999px; font-size:11px; background:#222633; color:#8a93a6; margin-left:6px; }
-  .news { margin-top:16px; font-size:13px; color:#8a93a6; }
+  .news { margin-top:16px; font-size:12px; color:#6b7280; }
 </style>
 </head>
 <body>
 
-<h1>FX Signal Dashboard</h1>
-<div class="sub">
-  Volatility-filtered pairs · EMA trend · RSI momentum · ADX strength<br/>
-  <strong>Not financial advice.</strong> Signals are decision-support only.
+<div class="header-row">
+  <h1>FIXORIUM AI SIGNAL</h1>
+  <button id="refresh" class="icon-btn" title="Refresh signals" aria-label="Refresh signals">
+    <svg width="24" height="24" viewBox="0 0 24 24" fill="none"
+         stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+      <line x1="20" y1="8" x2="5" y2="8"></line>
+      <polyline points="9 4 5 8 9 12"></polyline>
+      <line x1="4" y1="16" x2="19" y2="16"></line>
+      <polyline points="15 12 19 16 15 20"></polyline>
+    </svg>
+  </button>
 </div>
 
-<div style="margin-bottom:16px;">
-  <button id="refresh">Refresh Signals</button>
+<div class="marquee-bar">
+  <div class="marquee-track">
+    VOLATILITY-FILTERED PAIRS · EMA TREND · RSI MOMENTUM · ADX STRENGTH
+    &nbsp;&nbsp;|&nbsp;&nbsp;
+    <strong>NOT FINANCIAL ADVICE. SIGNALS ARE DECISION-SUPPORT ONLY.</strong>
+    &nbsp;&nbsp;&nbsp;&nbsp;
+  </div>
+</div>
+
+<div style="margin-bottom:12px;">
   <span class="badge" id="status">idle</span>
 </div>
 
 <div class="grid" id="cards"></div>
-<div class="news" id="newsBox"></div>
+<div class="news" id="errorsBox"></div>
 
 <script>
 /* ------------------------------------------------------------------
-   CONFIG — rotate this key and paste the new one here
+   CONFIG
 ------------------------------------------------------------------ */
 const TWELVE_DATA_KEY = "1d6484a8e4204e15ac6e63de1192a73e";
 
@@ -55,6 +130,8 @@ const PAIRS = [
   { label: "AUD/NZD", symbol: "AUD/NZD" },
   { label: "USD/CHF", symbol: "USD/CHF" },
 ];
+
+const SHOW_COUNT = 3; // strictly 3 pairs on screen
 
 /* ------------------------------------------------------------------
    INDICATORS
@@ -117,7 +194,7 @@ function adx(candles, period = 14) {
 }
 
 /* ------------------------------------------------------------------
-   FETCH  — FIXED: use ${TWELVE_DATA_KEY}, not ${1d6484...}
+   FETCH
 ------------------------------------------------------------------ */
 async function fetchSeries(pair) {
   const url = `https://api.twelvedata.com/time_series?symbol=${encodeURIComponent(pair.symbol)}&interval=15min&outputsize=200&apikey=${TWELVE_DATA_KEY}`;
@@ -169,6 +246,8 @@ function evaluate(candles) {
 ------------------------------------------------------------------ */
 const cardsEl = document.getElementById("cards");
 const statusEl = document.getElementById("status");
+const errorsBox = document.getElementById("errorsBox");
+const refreshBtn = document.getElementById("refresh");
 
 function renderCard(pair, data) {
   cardsEl.insertAdjacentHTML("beforeend", `
@@ -184,26 +263,20 @@ function renderCard(pair, data) {
     </div>`);
 }
 
-function renderError(pair, msg) {
-  cardsEl.insertAdjacentHTML("beforeend", `
-    <div class="card">
-      <div class="pair">${pair.label}</div>
-      <div class="signal ERR">ERROR</div>
-      <div class="conf">${msg}</div>
-    </div>`);
-}
-
 /* ------------------------------------------------------------------
-   MAIN  — FIXED: no more "missing API key" false trigger
+   MAIN — strictly max 3 cards
 ------------------------------------------------------------------ */
 async function refresh() {
   cardsEl.innerHTML = "";
-  document.getElementById("refresh").disabled = true;
+  errorsBox.innerHTML = "";
+  refreshBtn.disabled = true;
+  refreshBtn.classList.add("spinning");
 
   if (!TWELVE_DATA_KEY) {
     statusEl.textContent = "missing API key";
     cardsEl.innerHTML = `<div class="card">Paste your Twelve Data API key into <code>TWELVE_DATA_KEY</code> and redeploy.</div>`;
-    document.getElementById("refresh").disabled = false;
+    refreshBtn.disabled = false;
+    refreshBtn.classList.remove("spinning");
     return;
   }
 
@@ -218,18 +291,29 @@ async function refresh() {
     }
   }));
 
+  // Keep only successful ones, sort by ATR% ascending (lowest volatility first)
   const valid = results.filter(r => r.ok).map(r => ({ pair: r.pair, ...r.data }));
   valid.sort((a,b) => a.atrPct - b.atrPct);
-  const top3 = valid.slice(0, 3);
 
-  top3.forEach(r => renderCard(r.pair, r));
+  // Strictly take 3
+  const top = valid.slice(0, SHOW_COUNT);
+  top.forEach(r => renderCard(r.pair, r));
 
-  results.filter(r => !r.ok).forEach(r => renderError(r.pair, r.error));
+  // Failed pairs go into a small footer note, NOT as cards
+  const failed = results.filter(r => !r.ok);
+  if (failed.length) {
+    errorsBox.textContent = "Skipped (data unavailable): " +
+      failed.map(f => `${f.pair.label} — ${f.error}`).join(" · ");
+  }
 
-  statusEl.textContent = `updated ${new Date().toLocaleTimeString()} · showing ${top3.length} lowest-vol pairs`;
-  document.getElementById("refresh").disabled = false;
+  statusEl.textContent = valid.length
+    ? `updated ${new Date().toLocaleTimeString()} · showing ${top.length} lowest-vol pairs`
+    : `updated ${new Date().toLocaleTimeString()} · no valid data`;
+
+  refreshBtn.disabled = false;
+  refreshBtn.classList.remove("spinning");
 }
-document.getElementById("refresh").addEventListener("click", refresh);
+refreshBtn.addEventListener("click", refresh);
 refresh();
 </script>
 </body>
