@@ -5,7 +5,7 @@
 <meta name="viewport" content="width=device-width, initial-scale=1.0"/>
 <title>FIXORIUM AI SIGNAL</title>
 <style>
-  body { margin:0; font-family:system-ui,sans-serif; background:#0f1115; color:#e6e8ec; padding:24px; }
+  body { margin:0; font-family:system-ui,sans-serif; background:#0f1115; color:#e6e8ec; padding:24px; padding-bottom:80px; }
 
   .header-row {
     display:flex;
@@ -61,7 +61,6 @@
     to   { transform:translateX(-100%); }
   }
 
-  /* Strict 3-column grid */
   .grid {
     display:grid;
     grid-template-columns:repeat(3, 1fr);
@@ -84,6 +83,35 @@
 
   .badge { display:inline-block; padding:2px 8px; border-radius:999px; font-size:11px; background:#222633; color:#8a93a6; margin-left:6px; }
   .news { margin-top:16px; font-size:12px; color:#6b7280; }
+
+  /* FIXED BOTTOM CTA BAR — matches page background */
+  .cta-bar {
+    position:fixed;
+    left:0;
+    right:0;
+    bottom:0;
+    z-index:50;
+    display:flex;
+    align-items:center;
+    justify-content:center;
+    padding:14px 16px;
+    background:#0f1115;
+    border-top:1px solid #222633;
+  }
+  .cta-bar a {
+    color:#e6e8ec;
+    text-decoration:none;
+    font-weight:400;
+    letter-spacing:1.2px;
+    font-size:14px;
+    text-transform:uppercase;
+    display:inline-flex;
+    align-items:center;
+    gap:8px;
+    transition:color .2s;
+  }
+  .cta-bar a:hover { color:#2563eb; }
+  .cta-bar .arrow { font-size:16px; }
 </style>
 </head>
 <body>
@@ -117,6 +145,13 @@
 <div class="grid" id="cards"></div>
 <div class="news" id="errorsBox"></div>
 
+<!-- FIXED BOTTOM CTA -->
+<div class="cta-bar">
+  <a href="https://one.exnessonelink.com/a/abf72nul53" target="_blank" rel="noopener noreferrer">
+    Create Account <span class="arrow">→</span>
+  </a>
+</div>
+
 <script>
 /* ------------------------------------------------------------------
    CONFIG
@@ -131,7 +166,7 @@ const PAIRS = [
   { label: "USD/CHF", symbol: "USD/CHF" },
 ];
 
-const SHOW_COUNT = 3; // strictly 3 pairs on screen
+const SHOW_COUNT = 3;
 
 /* ------------------------------------------------------------------
    INDICATORS
@@ -264,7 +299,7 @@ function renderCard(pair, data) {
 }
 
 /* ------------------------------------------------------------------
-   MAIN — strictly max 3 cards
+   MAIN
 ------------------------------------------------------------------ */
 async function refresh() {
   cardsEl.innerHTML = "";
@@ -291,15 +326,12 @@ async function refresh() {
     }
   }));
 
-  // Keep only successful ones, sort by ATR% ascending (lowest volatility first)
   const valid = results.filter(r => r.ok).map(r => ({ pair: r.pair, ...r.data }));
   valid.sort((a,b) => a.atrPct - b.atrPct);
 
-  // Strictly take 3
   const top = valid.slice(0, SHOW_COUNT);
   top.forEach(r => renderCard(r.pair, r));
 
-  // Failed pairs go into a small footer note, NOT as cards
   const failed = results.filter(r => !r.ok);
   if (failed.length) {
     errorsBox.textContent = "Skipped (data unavailable): " +
