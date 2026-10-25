@@ -44,7 +44,7 @@
 
 <script>
 /* ------------------------------------------------------------------
-   CONFIG — PUT YOUR NEW (ROTATED) KEY HERE
+   CONFIG — rotate this key and paste the new one here
 ------------------------------------------------------------------ */
 const TWELVE_DATA_KEY = "1d6484a8e4204e15ac6e63de1192a73e";
 
@@ -117,10 +117,10 @@ function adx(candles, period = 14) {
 }
 
 /* ------------------------------------------------------------------
-   FETCH
+   FETCH  — FIXED: use ${TWELVE_DATA_KEY}, not ${1d6484...}
 ------------------------------------------------------------------ */
 async function fetchSeries(pair) {
-  const url = `https://api.twelvedata.com/time_series?symbol=${encodeURIComponent(pair.symbol)}&interval=15min&outputsize=200&apikey=${1d6484a8e4204e15ac6e63de1192a73e}`;
+  const url = `https://api.twelvedata.com/time_series?symbol=${encodeURIComponent(pair.symbol)}&interval=15min&outputsize=200&apikey=${TWELVE_DATA_KEY}`;
   const res = await fetch(url);
   const json = await res.json();
   if (json.status === "error") throw new Error(json.message || "API error");
@@ -194,13 +194,13 @@ function renderError(pair, msg) {
 }
 
 /* ------------------------------------------------------------------
-   MAIN
+   MAIN  — FIXED: no more "missing API key" false trigger
 ------------------------------------------------------------------ */
 async function refresh() {
   cardsEl.innerHTML = "";
   document.getElementById("refresh").disabled = true;
 
-  if (!TWELVE_DATA_KEY || TWELVE_DATA_KEY === "1d6484a8e4204e15ac6e63de1192a73e") {
+  if (!TWELVE_DATA_KEY) {
     statusEl.textContent = "missing API key";
     cardsEl.innerHTML = `<div class="card">Paste your Twelve Data API key into <code>TWELVE_DATA_KEY</code> and redeploy.</div>`;
     document.getElementById("refresh").disabled = false;
