@@ -70,11 +70,33 @@
     .grid { grid-template-columns:1fr; }
   }
 
-  .card { background:#181b22; border-radius:12px; padding:16px; border:1px solid #222633; }
+  /* Card — all text uppercase */
+  .card {
+    background:#181b22;
+    border-radius:12px;
+    padding:16px;
+    border:1px solid #222633;
+    text-transform:uppercase;
+  }
   .pair { font-size:18px; font-weight:600; }
   .price { font-size:22px; margin:6px 0; font-variant-numeric:tabular-nums; }
   .row { display:flex; justify-content:space-between; font-size:13px; color:#8a93a6; margin:4px 0; }
   .row span:last-child { color:#e6e8ec; }
+
+  /* Trade levels block */
+  .levels {
+    margin-top:12px;
+    padding:10px;
+    border-radius:8px;
+    background:#12151c;
+    border:1px solid #222633;
+  }
+  .levels .row { margin:3px 0; }
+  .levels .entry-val { color:#60a5fa; }
+  .levels .tp-val { color:#22c55e; }
+  .levels .sl-val { color:#ef4444; }
+  .levels .lot-val { color:#f59e0b; }
+
   .signal { margin-top:12px; padding:10px; border-radius:8px; text-align:center; font-weight:700; }
   .BUY { background:rgba(34,197,94,.15); color:#22c55e; }
   .SELL { background:rgba(239,68,68,.15); color:#ef4444; }
@@ -139,7 +161,7 @@
 </div>
 
 <div style="margin-bottom:12px;">
-  <span class="badge" id="status">idle</span>
+  <span class="badge" id="status">IDLE</span>
 </div>
 
 <div class="grid" id="cards"></div>
@@ -167,6 +189,13 @@ const PAIRS = [
 ];
 
 const SHOW_COUNT = 3;
+
+/* Fixed lot size for every signal (micro lot = 0.01) */
+const FIXED_LOT_SIZE = 0.01;
+
+/* TP/SL multipliers on ATR */
+const SL_ATR_MULT = 1.5;
+const TP_ATR_MULT = 3.0;
 
 /* ------------------------------------------------------------------
    INDICATORS
@@ -248,7 +277,7 @@ async function fetchSeries(pair) {
 }
 
 /* ------------------------------------------------------------------
-   EVALUATE
+   EVALUATE — trade levels with fixed 0.01 lot
 ------------------------------------------------------------------ */
 function evaluate(candles) {
   const closes = candles.map(c=>c.close);
@@ -269,10 +298,27 @@ function evaluate(candles) {
   if (score >= 3) signal = "BUY";
   else if (score <= 1) signal = "SELL";
 
+  const slDistance = a * SL_ATR_MULT;
+  const tpDistance = a * TP_ATR_MULT;
+
+  const entry = price;
+  let tp = null;
+  let sl = null;
+
+  if (signal === "BUY") {
+    tp = price + tpDistance;
+    sl = price - slDistance;
+  } else if (signal === "SELL") {
+    tp = price - tpDistance;
+    sl = price + slDistance;
+  }
+
   return {
     signal,
     confidence: Math.min(95, Math.round((Math.abs(score)/4)*100)),
     price, atr: a, atrPct: (a/price)*100, rsi: r, adx: d, emaFast: eFast, emaSlow: eSlow,
+    entry, tp, sl,
+    lotSize: FIXED_LOT_SIZE,
   };
 }
 
@@ -284,17 +330,32 @@ const statusEl = document.getElementById("status");
 const errorsBox = document.getElementById("errorsBox");
 const refreshBtn = document.getElementById("refresh");
 
+function fmt(v) { return v === null ? "—" : v.toFixed(4); }
+
 function renderCard(pair, data) {
+  const levelsBlock = data.signal === "NEUTRAL"
+    ? `<div class="levels">
+         <div class="row"><span>ENTRY / TP / SL</span><span>— NO TRADE —</span></div>
+         <div class="row"><span>LOT SIZE</span><span class="lot-val">${data.lotSize.toFixed(2)}</span></div>
+       </div>`
+    : `<div class="levels">
+         <div class="row"><span>ENTRY</span><span class="entry-val">${fmt(data.entry)}</span></div>
+         <div class="row"><span>TAKE PROFIT</span><span class="tp-val">${fmt(data.tp)}</span></div>
+         <div class="row"><span>STOP LOSS</span><span class="sl-val">${fmt(data.sl)}</span></div>
+         <div class="row"><span>LOT SIZE</span><span class="lot-val">${data.lotSize.toFixed(2)}</span></div>
+       </div>`;
+
   cardsEl.insertAdjacentHTML("beforeend", `
     <div class="card">
       <div class="pair">${pair.label}</div>
       <div class="price">${data.price.toFixed(4)}</div>
-      <div class="row"><span>ATR (vol)</span><span>${data.atr.toFixed(4)} (${data.atrPct.toFixed(2)}%)</span></div>
+      <div class="row"><span>ATR (VOL)</span><span>${data.atr.toFixed(4)} (${data.atrPct.toFixed(2)}%)</span></div>
       <div class="row"><span>RSI</span><span>${data.rsi.toFixed(1)}</span></div>
       <div class="row"><span>ADX</span><span>${data.adx.toFixed(1)}</span></div>
       <div class="row"><span>EMA20 / EMA50</span><span>${data.emaFast.toFixed(4)} / ${data.emaSlow.toFixed(4)}</span></div>
+      ${levelsBlock}
       <div class="signal ${data.signal}">${data.signal}</div>
-      <div class="conf">Confidence: ${data.confidence}%</div>
+      <div class="conf">CONFIDENCE: ${data.confidence}%</div>
     </div>`);
 }
 
@@ -308,14 +369,14 @@ async function refresh() {
   refreshBtn.classList.add("spinning");
 
   if (!TWELVE_DATA_KEY) {
-    statusEl.textContent = "missing API key";
-    cardsEl.innerHTML = `<div class="card">Paste your Twelve Data API key into <code>TWELVE_DATA_KEY</code> and redeploy.</div>`;
+    statusEl.textContent = "MISSING API KEY";
+    cardsEl.innerHTML = `<div class="card">PASTE YOUR TWELVE DATA API KEY INTO <code>TWELVE_DATA_KEY</code> AND REDEPLOY.</div>`;
     refreshBtn.disabled = false;
     refreshBtn.classList.remove("spinning");
     return;
   }
 
-  statusEl.textContent = "loading…";
+  statusEl.textContent = "LOADING…";
 
   const results = await Promise.all(PAIRS.map(async p => {
     try {
@@ -334,13 +395,13 @@ async function refresh() {
 
   const failed = results.filter(r => !r.ok);
   if (failed.length) {
-    errorsBox.textContent = "Skipped (data unavailable): " +
+    errorsBox.textContent = "SKIPPED (DATA UNAVAILABLE): " +
       failed.map(f => `${f.pair.label} — ${f.error}`).join(" · ");
   }
 
   statusEl.textContent = valid.length
-    ? `updated ${new Date().toLocaleTimeString()} · showing ${top.length} lowest-vol pairs`
-    : `updated ${new Date().toLocaleTimeString()} · no valid data`;
+    ? `UPDATED ${new Date().toLocaleTimeString()} · SHOWING ${top.length} LOWEST-VOL PAIRS`
+    : `UPDATED ${new Date().toLocaleTimeString()} · NO VALID DATA`;
 
   refreshBtn.disabled = false;
   refreshBtn.classList.remove("spinning");
