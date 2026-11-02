@@ -1,7 +1,7 @@
 // functions/api/exness/positions.js
 // GET /api/exness/positions
 // Flow: Gateway discovery -> Access Point -> positions.
-// ⚠️ ENDPOINT PATH NOT CONFIRMED — verify in your Exness OpenAPI spec.
+// Correct path: /v1/trading/accounts/{account_id}/positions
 
 import { exnessFetch } from './_auth.js';
 
@@ -34,10 +34,8 @@ export async function onRequestGet(context) {
     const apBase = apData.access_point.replace(/\/+$/, '');
 
     // 3. Fetch positions from Access Point
-    // ⚠️ Replace this path with the correct one from your OpenAPI spec.
-    // Candidates: /v1/trading/positions, /v1/positions,
-    // /v1/accounts/{id}/positions
-    const positionsPath = `/v1/trading/positions?account_id=${EXNESS_ACCOUNT_ID}`;
+    // Correct path: /v1/trading/accounts/{account_id}/positions
+    const positionsPath = `/v1/trading/accounts/${EXNESS_ACCOUNT_ID}/positions`;
     const posRes = await exnessFetch(`${apBase}${positionsPath}`, 'GET', null, env);
     const posData = await posRes.json().catch(() => ({}));
 
@@ -46,9 +44,6 @@ export async function onRequestGet(context) {
         error: 'POSITIONS_FETCH_FAILED',
         status: posRes.status,
         detail: posData,
-        hint: posRes.status === 403
-          ? 'API key may lack Trading scope. Check Key Management in Exness PA.'
-          : undefined,
       }), { status: posRes.status, headers: corsHeaders });
     }
 
