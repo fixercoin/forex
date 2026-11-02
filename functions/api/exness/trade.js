@@ -1,5 +1,5 @@
-// functions/api/exness/execute.js
-// POST /api/exness/execute
+// functions/api/exness/trade.js
+// POST /api/exness/trade
 // Official flow:
 // 1. Discover Access Point via Gateway host
 // 2. POST /v1/trading/accounts/{account_id}/positions
