@@ -77,10 +77,12 @@
   </a>
 </div>
 
-<!-- Trade dialog: confirm only, no password, no accounts -->
+<!-- Inline password dialog -->
 <dialog id="tradeDialog" style="background:#181b22; color:#e6e8ec; border:1px solid #222633; border-radius:12px; padding:20px; max-width:420px; width:90%; font-family:system-ui,sans-serif;">
-  <h3 style="margin:0 0 12px; font-size:16px;">CONFIRM TRADE</h3>
+  <h3 style="margin:0 0 12px; font-size:16px;">EXECUTE TRADE</h3>
   <div id="dialogSignalInfo" style="font-size:13px; color:#8a93a6; margin-bottom:16px;"></div>
+  <label style="display:block; font-size:12px; color:#8a93a6; margin-bottom:4px;">ADMIN PASSWORD</label>
+  <input id="dialogPassword" type="password" placeholder="Enter admin password" style="width:100%; padding:8px; background:#12151c; color:#e6e8ec; border:1px solid #222633; border-radius:6px; font-size:14px; margin-bottom:12px; box-sizing:border-box;">
   <div id="dialogError" style="color:#ef4444; font-size:12px; margin-bottom:8px; display:none;"></div>
   <div style="display:flex; gap:8px;">
     <button id="dialogCancel" style="flex:1; padding:10px; background:#222633; color:#e6e8ec; border:0; border-radius:6px; cursor:pointer; font-size:13px;">CANCEL</button>
@@ -104,113 +106,22 @@ const SHOW_COUNT = 3;
 const FIXED_LOT_SIZE = 0.01;
 const SL_ATR_MULT = 1.5;
 const TP_ATR_MULT = 3.0;
-
-// Exness instrument names (no slash)
-const EXNESS_SYMBOL_MAP = {
-  'EUR/GBP': 'EURGBP', 'EUR/CHF': 'EURCHF', 'GBP/CHF': 'GBPCHF',
-  'AUD/NZD': 'AUDNZD', 'USD/CHF': 'USDCHF',
-};
-
-// Your Exness account ID (from PA)
-const EXNESS_ACCOUNT_ID = '11724101';
+const EXNESS_SYMBOL_MAP = { 'EUR/GBP': 'EURGBP', 'EUR/CHF': 'EURCHF', 'GBP/CHF': 'GBPCHF', 'AUD/NZD': 'AUDNZD', 'USD/CHF': 'USDCHF' };
+const EXNESS_ACCOUNT_ID = '16000620992';
 
 /* ------------------------------------------------------------------
    INDICATORS
 ------------------------------------------------------------------ */
-function ema(values, period) {
-  const k = 2 / (period + 1);
-  let prev = values.slice(0, period).reduce((a,b)=>a+b,0) / period;
-  for (let i = period; i < values.length; i++) prev = values[i]*k + prev*(1-k);
-  return prev;
-}
-function rsi(closes, period = 14) {
-  let g=0,l=0;
-  for (let i=1;i<=period;i++){const d=closes[i]-closes[i-1]; d>=0?g+=d:l-=d;}
-  let ag=g/period, al=l/period;
-  for (let i=period+1;i<closes.length;i++){
-    const d=closes[i]-closes[i-1];
-    ag=(ag*(period-1)+(d>0?d:0))/period;
-    al=(al*(period-1)+(d<0?-d:0))/period;
-  }
-  const rs = al===0?100:ag/al;
-  return 100 - 100/(1+rs);
-}
-function atr(candles, period = 14) {
-  const trs=[];
-  for (let i=1;i<candles.length;i++){
-    trs.push(Math.max(candles[i].high-candles[i].low, Math.abs(candles[i].high-candles[i-1].close), Math.abs(candles[i].low-candles[i-1].close)));
-  }
-  return trs.slice(-period).reduce((a,b)=>a+b,0)/period;
-}
-function adx(candles, period = 14) {
-  const pDM=[],mDM=[],trs=[];
-  for (let i=1;i<candles.length;i++){
-    const up=candles[i].high-candles[i-1].high;
-    const dn=candles[i-1].low-candles[i].low;
-    pDM.push(up>dn&&up>0?up:0);
-    mDM.push(dn>up&&dn>0?dn:0);
-    trs.push(Math.max(candles[i].high-candles[i].low, Math.abs(candles[i].high-candles[i-1].close), Math.abs(candles[i].low-candles[i-1].close)));
-  }
-  let trS=trs.slice(0,period).reduce((a,b)=>a+b,0);
-  let pS =pDM.slice(0,period).reduce((a,b)=>a+b,0);
-  let mS =mDM.slice(0,period).reduce((a,b)=>a+b,0);
-  const dxs=[];
-  for (let i=period;i<trs.length;i++){
-    trS=trS-trS/period+trs[i];
-    pS =pS -pS /period+pDM[i];
-    mS =mS -mS /period+mDM[i];
-    const pDI=100*pS/trS, mDI=100*mS/trS;
-    dxs.push(100*Math.abs(pDI-mDI)/(pDI+mDI||1));
-  }
-  if (dxs.length<period) return dxs[dxs.length-1]||0;
-  return dxs.slice(-period).reduce((a,b)=>a+b,0)/period;
-}
+function ema(values, period) { const k = 2 / (period + 1); let prev = values.slice(0, period).reduce((a,b)=>a+b,0) / period; for (let i = period; i < values.length; i++) prev = values[i]*k + prev*(1-k); return prev; }
+function rsi(closes, period = 14) { let g=0,l=0; for (let i=1;i<=period;i++){const d=closes[i]-closes[i-1]; d>=0?g+=d:l-=d;} let ag=g/period, al=l/period; for (let i=period+1;i<closes.length;i++){const d=closes[i]-closes[i-1]; ag=(ag*(period-1)+(d>0?d:0))/period; al=(al*(period-1)+(d<0?-d:0))/period;} const rs = al===0?100:ag/al; return 100 - 100/(1+rs); }
+function atr(candles, period = 14) { const trs=[]; for (let i=1;i<candles.length;i++){trs.push(Math.max(candles[i].high-candles[i].low, Math.abs(candles[i].high-candles[i-1].close), Math.abs(candles[i].low-candles[i-1].close)));} return trs.slice(-period).reduce((a,b)=>a+b,0)/period; }
+function adx(candles, period = 14) { const pDM=[],mDM=[],trs=[]; for (let i=1;i<candles.length;i++){const up=candles[i].high-candles[i-1].high; const dn=candles[i-1].low-candles[i].low; pDM.push(up>dn&&up>0?up:0); mDM.push(dn>up&&dn>0?dn:0); trs.push(Math.max(candles[i].high-candles[i].low, Math.abs(candles[i].high-candles[i-1].close), Math.abs(candles[i].low-candles[i-1].close)));} let trS=trs.slice(0,period).reduce((a,b)=>a+b,0); let pS=pDM.slice(0,period).reduce((a,b)=>a+b,0); let mS=mDM.slice(0,period).reduce((a,b)=>a+b,0); const dxs=[]; for (let i=period;i<trs.length;i++){trS=trS-trS/period+trs[i]; pS=pS-pS/period+pDM[i]; mS=mS-mS/period+mDM[i]; const pDI=100*pS/trS, mDI=100*mS/trS; dxs.push(100*Math.abs(pDI-mDI)/(pDI+mDI||1));} if (dxs.length<period) return dxs[dxs.length-1]||0; return dxs.slice(-period).reduce((a,b)=>a+b,0)/period; }
 
 /* ------------------------------------------------------------------
    FETCH & EVALUATE
 ------------------------------------------------------------------ */
-async function fetchSeries(pair) {
-  const url = `https://api.twelvedata.com/time_series?symbol=${encodeURIComponent(pair.symbol)}&interval=15min&outputsize=200&apikey=${TWELVE_DATA_KEY}`;
-  const res = await fetch(url);
-  const json = await res.json();
-  if (json.status === "error") throw new Error(json.message || "API error");
-  if (!json.values || !json.values.length) throw new Error("Empty values array");
-  const rows = json.values.slice().reverse();
-  return { candles: rows.map(r => ({ high: parseFloat(r.high), low: parseFloat(r.low), close: parseFloat(r.close) })) };
-}
-
-function evaluate(candles) {
-  const closes = candles.map(c=>c.close);
-  const price = closes[closes.length-1];
-  const eFast = ema(closes, 20);
-  const eSlow = ema(closes, 50);
-  const r = rsi(closes, 14);
-  const a = atr(candles, 14);
-  const d = adx(candles, 14);
-
-  let score = 0;
-  if (price > eFast) score++;
-  if (eFast > eSlow) score++;
-  if (r > 50) score++;
-  if (d > 25) score++;
-
-  let signal = "NEUTRAL";
-  if (score >= 3) signal = "BUY";
-  else if (score <= 1) signal = "SELL";
-
-  const slDistance = a * SL_ATR_MULT;
-  const tpDistance = a * TP_ATR_MULT;
-  const entry = price;
-  let tp = null, sl = null;
-  if (signal === "BUY") { tp = price + tpDistance; sl = price - slDistance; }
-  else if (signal === "SELL") { tp = price - tpDistance; sl = price + slDistance; }
-
-  return {
-    signal, confidence: Math.min(95, Math.round((Math.abs(score)/4)*100)),
-    price, atr: a, atrPct: (a/price)*100, rsi: r, adx: d, emaFast: eFast, emaSlow: eSlow,
-    entry, tp, sl, lotSize: FIXED_LOT_SIZE,
-  };
-}
+async function fetchSeries(pair) { const url = `https://api.twelvedata.com/time_series?symbol=${encodeURIComponent(pair.symbol)}&interval=15min&outputsize=200&apikey=${TWELVE_DATA_KEY}`; const res = await fetch(url); const json = await res.json(); if (json.status === "error") throw new Error(json.message || "API error"); if (!json.values || !json.values.length) throw new Error("Empty values array"); const rows = json.values.slice().reverse(); return { candles: rows.map(r => ({ high: parseFloat(r.high), low: parseFloat(r.low), close: parseFloat(r.close) })) }; }
+function evaluate(candles) { const closes = candles.map(c=>c.close); const price = closes[closes.length-1]; const eFast = ema(closes, 20); const eSlow = ema(closes, 50); const r = rsi(closes, 14); const a = atr(candles, 14); const d = adx(candles, 14); let score = 0; if (price > eFast) score++; if (eFast > eSlow) score++; if (r > 50) score++; if (d > 25) score++; let signal = "NEUTRAL"; if (score >= 3) signal = "BUY"; else if (score <= 1) signal = "SELL"; const slDistance = a * SL_ATR_MULT; const tpDistance = a * TP_ATR_MULT; const entry = price; let tp = null, sl = null; if (signal === "BUY") { tp = price + tpDistance; sl = price - slDistance; } else if (signal === "SELL") { tp = price - tpDistance; sl = price + slDistance; } return { signal, confidence: Math.min(95, Math.round((Math.abs(score)/4)*100)), price, atr: a, atrPct: (a/price)*100, rsi: r, adx: d, emaFast: eFast, emaSlow: eSlow, entry, tp, sl, lotSize: FIXED_LOT_SIZE }; }
 
 /* ------------------------------------------------------------------
    RENDER
@@ -219,42 +130,21 @@ const cardsEl = document.getElementById("cards");
 const statusEl = document.getElementById("status");
 const errorsBox = document.getElementById("errorsBox");
 const refreshBtn = document.getElementById("refresh");
-
 function fmt(v) { return v === null ? "—" : v.toFixed(4); }
-
 function renderCard(pair, data) {
-  const levelsBlock = data.signal === "NEUTRAL"
-    ? `<div class="levels"><div class="row"><span>ENTRY / TP / SL</span><span>— NO TRADE —</span></div><div class="row"><span>LOT SIZE</span><span class="lot-val">${data.lotSize.toFixed(2)}</span></div></div>`
-    : `<div class="levels">
-         <div class="row"><span>ENTRY</span><span class="entry-val">${fmt(data.entry)}</span></div>
-         <div class="row"><span>TAKE PROFIT</span><span class="tp-val">${fmt(data.tp)}</span></div>
-         <div class="row"><span>STOP LOSS</span><span class="sl-val">${fmt(data.sl)}</span></div>
-         <div class="row"><span>LOT SIZE</span><span class="lot-val">${data.lotSize.toFixed(2)}</span></div>
-       </div>`;
-
-  cardsEl.insertAdjacentHTML("beforeend", `
-    <div class="card" data-pair="${pair.label}" data-signal="${data.signal}" data-entry="${data.entry}" data-tp="${data.tp ?? ''}" data-sl="${data.sl ?? ''}">
-      <div class="pair">${pair.label}</div>
-      <div class="price">${data.price.toFixed(4)}</div>
-      <div class="row"><span>ATR (VOL)</span><span>${data.atr.toFixed(4)} (${data.atrPct.toFixed(2)}%)</span></div>
-      <div class="row"><span>RSI</span><span>${data.rsi.toFixed(1)}</span></div>
-      <div class="row"><span>ADX</span><span>${data.adx.toFixed(1)}</span></div>
-      <div class="row"><span>EMA20 / EMA50</span><span>${data.emaFast.toFixed(4)} / ${data.emaSlow.toFixed(4)}</span></div>
-      ${levelsBlock}
-      <div class="signal ${data.signal}" style="cursor:${data.signal !== 'NEUTRAL' ? 'pointer' : 'default'};" data-action="trade">${data.signal}</div>
-      <div class="conf">CONFIDENCE: ${data.confidence}%</div>
-    </div>`);
+  const levelsBlock = data.signal === "NEUTRAL" ? `<div class="levels"><div class="row"><span>ENTRY / TP / SL</span><span>— NO TRADE —</span></div><div class="row"><span>LOT SIZE</span><span class="lot-val">${data.lotSize.toFixed(2)}</span></div></div>` : `<div class="levels"><div class="row"><span>ENTRY</span><span class="entry-val">${fmt(data.entry)}</span></div><div class="row"><span>TAKE PROFIT</span><span class="tp-val">${fmt(data.tp)}</span></div><div class="row"><span>STOP LOSS</span><span class="sl-val">${fmt(data.sl)}</span></div><div class="row"><span>LOT SIZE</span><span class="lot-val">${data.lotSize.toFixed(2)}</span></div></div>`;
+  cardsEl.insertAdjacentHTML("beforeend", `<div class="card" data-pair="${pair.label}" data-signal="${data.signal}" data-entry="${data.entry}" data-tp="${data.tp ?? ''}" data-sl="${data.sl ?? ''}"><div class="pair">${pair.label}</div><div class="price">${data.price.toFixed(4)}</div><div class="row"><span>ATR (VOL)</span><span>${data.atr.toFixed(4)} (${data.atrPct.toFixed(2)}%)</span></div><div class="row"><span>RSI</span><span>${data.rsi.toFixed(1)}</span></div><div class="row"><span>ADX</span><span>${data.adx.toFixed(1)}</span></div><div class="row"><span>EMA20 / EMA50</span><span>${data.emaFast.toFixed(4)} / ${data.emaSlow.toFixed(4)}</span></div>${levelsBlock}<div class="signal ${data.signal}" style="cursor:${data.signal !== 'NEUTRAL' ? 'pointer' : 'default'};" data-action="trade">${data.signal}</div><div class="conf">CONFIDENCE: ${data.confidence}%</div></div>`);
 }
 
 /* ------------------------------------------------------------------
-   TRADE DIALOG — confirm only
+   TRADE DIALOG
 ------------------------------------------------------------------ */
 const tradeDialog = document.getElementById('tradeDialog');
 const dialogSignalInfo = document.getElementById('dialogSignalInfo');
+const dialogPassword = document.getElementById('dialogPassword');
 const dialogError = document.getElementById('dialogError');
 const dialogCancel = document.getElementById('dialogCancel');
 const dialogExecute = document.getElementById('dialogExecute');
-
 let pendingTrade = null;
 
 cardsEl.addEventListener("click", async (e) => {
@@ -263,16 +153,15 @@ cardsEl.addEventListener("click", async (e) => {
   const card = signalEl.closest('.card');
   const signal = card.dataset.signal;
   if (signal !== 'BUY' && signal !== 'SELL') return;
-
   const pairLabel = card.dataset.pair;
   const entry = parseFloat(card.dataset.entry);
   const tp = card.dataset.tp ? parseFloat(card.dataset.tp) : null;
   const sl = card.dataset.sl ? parseFloat(card.dataset.sl) : null;
   const symbol = EXNESS_SYMBOL_MAP[pairLabel];
   if (!symbol) { alert('No Exness symbol mapping for ' + pairLabel); return; }
-
   pendingTrade = { signal, pairLabel, entry, tp, sl, symbol };
   dialogSignalInfo.innerHTML = `<strong style="color:#e6e8ec;">${signal} ${pairLabel}</strong><br>Entry: ${entry.toFixed(4)} · TP: ${tp ? tp.toFixed(4) : '—'} · SL: ${sl ? sl.toFixed(4) : '—'}`;
+  dialogPassword.value = '';
   dialogError.style.display = 'none';
   tradeDialog.showModal();
 });
@@ -281,12 +170,12 @@ dialogCancel.addEventListener('click', () => { tradeDialog.close(); pendingTrade
 
 dialogExecute.addEventListener('click', async () => {
   if (!pendingTrade) { tradeDialog.close(); return; }
+  const password = dialogPassword.value;
+  if (!password) { dialogError.textContent = 'Password required.'; dialogError.style.display = 'block'; return; }
   const { signal, symbol, tp, sl } = pendingTrade;
-
   dialogExecute.disabled = true;
   dialogExecute.textContent = 'SENDING...';
   dialogError.style.display = 'none';
-
   try {
     const res = await fetch('/api/exness/trade', {
       method: 'POST',
@@ -294,24 +183,28 @@ dialogExecute.addEventListener('click', async () => {
       body: JSON.stringify({
         accountId: EXNESS_ACCOUNT_ID,
         instrument: symbol,
-        side: signal.toLowerCase(),        // "buy" or "sell"
-        volume: String(FIXED_LOT_SIZE),    // decimal string
-        takeProfitPrice: tp != null ? tp.toFixed(5) : null,  // decimal string
+        side: signal.toLowerCase(),
+        volume: String(FIXED_LOT_SIZE),
+        takeProfitPrice: tp != null ? tp.toFixed(5) : null,
         stopLossPrice: sl != null ? sl.toFixed(5) : null,
+        adminPassword: password,
       }),
     });
     const data = await res.json();
-
     if (!res.ok) {
-      dialogError.textContent = data.error || data.detail?.error_message || 'Trade failed';
+      if (data.error && data.error.includes('ADMIN_PASSWORD_INVALID')) {
+        dialogError.textContent = 'Incorrect admin password.';
+      } else if (data.error && data.error.includes('AUTH_RATE_LIMIT')) {
+        dialogError.textContent = 'Rate limited by Exness. Please wait a few seconds and try again.';
+      } else {
+        dialogError.textContent = data.error || data.detail?.error_message || 'Trade failed';
+      }
       dialogError.style.display = 'block';
       return;
     }
-
     alert('Order accepted. Operation ID: ' + (data.operation_id || '—'));
     tradeDialog.close();
     pendingTrade = null;
-
   } catch (err) {
     dialogError.textContent = 'Network error: ' + err.message;
     dialogError.style.display = 'block';
@@ -329,32 +222,15 @@ async function refresh() {
   errorsBox.innerHTML = "";
   refreshBtn.disabled = true;
   refreshBtn.classList.add("spinning");
-
-  if (!TWELVE_DATA_KEY) {
-    statusEl.textContent = "MISSING API KEY";
-    cardsEl.innerHTML = `<div class="card">PASTE YOUR TWELVE DATA API KEY INTO TWELVE_DATA_KEY AND REDEPLOY.</div>`;
-    refreshBtn.disabled = false;
-    refreshBtn.classList.remove("spinning");
-    return;
-  }
-
+  if (!TWELVE_DATA_KEY) { statusEl.textContent = "MISSING API KEY"; cardsEl.innerHTML = `<div class="card">PASTE YOUR TWELVE DATA API KEY INTO TWELVE_DATA_KEY AND REDEPLOY.</div>`; refreshBtn.disabled = false; refreshBtn.classList.remove("spinning"); return; }
   statusEl.textContent = "LOADING…";
-  const results = await Promise.all(PAIRS.map(async p => {
-    try { const { candles } = await fetchSeries(p); return { pair: p, ok: true, data: evaluate(candles) }; }
-    catch (err) { return { pair: p, ok: false, error: err.message }; }
-  }));
-
+  const results = await Promise.all(PAIRS.map(async p => { try { const { candles } = await fetchSeries(p); return { pair: p, ok: true, data: evaluate(candles) }; } catch (err) { return { pair: p, ok: false, error: err.message }; } }));
   const valid = results.filter(r => r.ok).map(r => ({ pair: r.pair, ...r.data }));
   valid.sort((a,b) => a.atrPct - b.atrPct);
   valid.slice(0, SHOW_COUNT).forEach(r => renderCard(r.pair, r));
-
   const failed = results.filter(r => !r.ok);
   if (failed.length) errorsBox.textContent = "SKIPPED: " + failed.map(f => `${f.pair.label} — ${f.error}`).join(" · ");
-
-  statusEl.textContent = valid.length
-    ? `UPDATED ${new Date().toLocaleTimeString()} · SHOWING ${Math.min(valid.length, SHOW_COUNT)} LOWEST-VOL PAIRS`
-    : `UPDATED ${new Date().toLocaleTimeString()} · NO VALID DATA`;
-
+  statusEl.textContent = valid.length ? `UPDATED ${new Date().toLocaleTimeString()} · SHOWING ${Math.min(valid.length, SHOW_COUNT)} LOWEST-VOL PAIRS` : `UPDATED ${new Date().toLocaleTimeString()} · NO VALID DATA`;
   refreshBtn.disabled = false;
   refreshBtn.classList.remove("spinning");
 }
