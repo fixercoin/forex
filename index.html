@@ -3,7 +3,7 @@
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0"/>
-<title>FIXORIUM AI BOT</title>
+<title>FIXORIUM AI SIGNAL</title>
 <style>
   body { margin:0; font-family:system-ui,sans-serif; background:#0f1115; color:#e6e8ec; padding:24px; padding-bottom:80px; }
 
@@ -146,12 +146,15 @@
   }
   .cta-bar a:hover { color:#2563eb; }
   .cta-bar .arrow { font-size:16px; }
+
+  /* Native dialog styling */
+  dialog::backdrop { background:rgba(0,0,0,.6); }
 </style>
 </head>
 <body>
 
 <div class="header-row">
-  <h1>FIXORIUM</h1>
+  <h1>FIXORIUM AI SIGNAL</h1>
   <div style="display:flex;align-items:center;gap:8px;">
     <span id="plBadge" class="pl-badge" title="Click for position details">P/L —</span>
     <button id="refresh" class="icon-btn" title="Refresh signals" aria-label="Refresh signals">
@@ -187,6 +190,46 @@
     Create Account <span class="arrow">→</span>
   </a>
 </div>
+
+<!-- Trade execution dialog -->
+<dialog id="tradeDialog" style="
+  background:#181b22; color:#e6e8ec; border:1px solid #222633;
+  border-radius:12px; padding:20px; max-width:420px; width:90%;
+  font-family:system-ui,sans-serif;
+">
+  <h3 style="margin:0 0 12px; font-size:16px;">EXECUTE TRADE</h3>
+
+  <div id="dialogSignalInfo" style="font-size:13px; color:#8a93a6; margin-bottom:16px;"></div>
+
+  <label style="display:block; font-size:12px; color:#8a93a6; margin-bottom:4px;">ACCOUNT</label>
+  <select id="dialogAccountSelect" style="
+    width:100%; padding:8px; background:#12151c; color:#e6e8ec;
+    border:1px solid #222633; border-radius:6px; font-size:14px; margin-bottom:12px;
+  "></select>
+
+  <div id="dialogAccountDetail" style="
+    background:#12151c; border:1px solid #222633; border-radius:8px;
+    padding:10px; font-size:12px; color:#8a93a6; margin-bottom:16px;
+  ">Loading account details...</div>
+
+  <label style="display:block; font-size:12px; color:#8a93a6; margin-bottom:4px;">ADMIN PASSWORD</label>
+  <input id="dialogPassword" type="password" placeholder="Enter admin password" style="
+    width:100%; padding:8px; background:#12151c; color:#e6e8ec;
+    border:1px solid #222633; border-radius:6px; font-size:14px; margin-bottom:16px;
+    box-sizing:border-box;
+  ">
+
+  <div style="display:flex; gap:8px;">
+    <button id="dialogCancel" style="
+      flex:1; padding:10px; background:#222633; color:#e6e8ec;
+      border:0; border-radius:6px; cursor:pointer; font-size:13px;
+    ">CANCEL</button>
+    <button id="dialogExecute" style="
+      flex:1; padding:10px; background:#2563eb; color:#fff;
+      border:0; border-radius:6px; cursor:pointer; font-size:13px; font-weight:600;
+    ">EXECUTE</button>
+  </div>
+</dialog>
 
 <script>
 /* ------------------------------------------------------------------
@@ -379,8 +422,18 @@ function renderCard(pair, data) {
 }
 
 /* ------------------------------------------------------------------
-   EXNESS: ADMIN-PROTECTED TRADE EXECUTION
+   TRADE DIALOG
 ------------------------------------------------------------------ */
+const tradeDialog = document.getElementById('tradeDialog');
+const dialogSignalInfo = document.getElementById('dialogSignalInfo');
+const dialogAccountSelect = document.getElementById('dialogAccountSelect');
+const dialogAccountDetail = document.getElementById('dialogAccountDetail');
+const dialogPassword = document.getElementById('dialogPassword');
+const dialogCancel = document.getElementById('dialogCancel');
+const dialogExecute = document.getElementById('dialogExecute');
+
+let pendingTrade = null;
+let loadedAccounts = [];
 
 cardsEl.addEventListener("click", async (e) => {
   const signalEl = e.target.closest('[data-action="trade"]');
@@ -401,17 +454,104 @@ cardsEl.addEventListener("click", async (e) => {
     return;
   }
 
-  // Admin password prompt
-  const password = prompt(
-    `Admin authorization required to execute ${signal}.\n\n` +
-    `Pair: ${pairLabel}\n` +
-    `Entry: ${entry.toFixed(4)}\n` +
-    `TP: ${tp ? tp.toFixed(4) : '—'}\n` +
-    `SL: ${sl ? sl.toFixed(4) : '—'}\n\n` +
-    `Enter admin password:`
-  );
+  pendingTrade = { signal, pairLabel, entry, tp, sl, symbol };
 
-  if (!password) return;
+  dialogSignalInfo.innerHTML = `
+    <strong style="color:#e6e8ec;">${signal} ${pairLabel}</strong><br>
+    Entry: ${entry.toFixed(4)} · TP: ${tp ? tp.toFixed(4) : '—'} · SL: ${sl ? sl.toFixed(4) : '—'}
+  `;
+
+  dialogPassword.value = '';
+  dialogAccountDetail.textContent = 'Loading account details...';
+  dialogAccountSelect.innerHTML = '<option value="">Loading...</option>';
+
+  await loadAccountsForDialog();
+  tradeDialog.showModal();
+});
+
+async function loadAccountsForDialog() {
+  try {
+    const res = await fetch('/api/exness/accounts');
+    const data = await res.json();
+
+    if (!res.ok) {
+      dialogAccountSelect.innerHTML = '<option value="">— Load failed —</option>';
+      dialogAccountDetail.textContent = 'Error: ' + (data.error || 'Unknown error');
+      return;
+    }
+
+    // Expected: { accounts: [{ id, balance, equity, margin, freeMargin, currency, leverage }] }
+    // Adjust field names based on actual Exness API response
+    const accounts = data.accounts || data || [];
+    loadedAccounts = accounts;
+
+    if (!accounts.length) {
+      dialogAccountSelect.innerHTML = '<option value="">— No accounts —</option>';
+      dialogAccountDetail.textContent = 'No trading accounts found.';
+      return;
+    }
+
+    dialogAccountSelect.innerHTML = accounts.map(a =>
+      `<option value="${a.id || a.accountId}">${a.id || a.accountId} — ${a.currency || 'USD'}</option>`
+    ).join('');
+
+    renderAccountDetail(accounts[0]);
+    dialogAccountSelect.onchange = () => {
+      const selectedId = dialogAccountSelect.value;
+      const acc = loadedAccounts.find(a => String(a.id || a.accountId) === selectedId);
+      if (acc) renderAccountDetail(acc);
+    };
+
+  } catch (err) {
+    dialogAccountSelect.innerHTML = '<option value="">— Network error —</option>';
+    dialogAccountDetail.textContent = 'Network error: ' + err.message;
+  }
+}
+
+function renderAccountDetail(acc) {
+  const balance = acc.balance != null ? Number(acc.balance).toFixed(2) : '—';
+  const equity = acc.equity != null ? Number(acc.equity).toFixed(2) : '—';
+  const margin = acc.margin != null ? Number(acc.margin).toFixed(2) : '—';
+  const freeMargin = acc.freeMargin != null ? Number(acc.freeMargin).toFixed(2) : '—';
+  const currency = acc.currency || 'USD';
+  const leverage = acc.leverage || '—';
+
+  dialogAccountDetail.innerHTML = `
+    <div style="display:flex; justify-content:space-between; margin:2px 0;">
+      <span>BALANCE</span><span style="color:#e6e8ec;">${balance} ${currency}</span>
+    </div>
+    <div style="display:flex; justify-content:space-between; margin:2px 0;">
+      <span>EQUITY</span><span style="color:#e6e8ec;">${equity} ${currency}</span>
+    </div>
+    <div style="display:flex; justify-content:space-between; margin:2px 0;">
+      <span>MARGIN</span><span style="color:#e6e8ec;">${margin} ${currency}</span>
+    </div>
+    <div style="display:flex; justify-content:space-between; margin:2px 0;">
+      <span>FREE MARGIN</span><span style="color:#e6e8ec;">${freeMargin} ${currency}</span>
+    </div>
+    <div style="display:flex; justify-content:space-between; margin:2px 0;">
+      <span>LEVERAGE</span><span style="color:#e6e8ec;">${leverage}</span>
+    </div>
+  `;
+}
+
+dialogCancel.addEventListener('click', () => {
+  tradeDialog.close();
+  pendingTrade = null;
+});
+
+dialogExecute.addEventListener('click', async () => {
+  const password = dialogPassword.value;
+  const accountId = dialogAccountSelect.value;
+
+  if (!password) { alert('Admin password required.'); return; }
+  if (!accountId) { alert('No account selected.'); return; }
+  if (!pendingTrade) { tradeDialog.close(); return; }
+
+  const { signal, symbol, entry, tp, sl } = pendingTrade;
+
+  dialogExecute.disabled = true;
+  dialogExecute.textContent = 'EXECUTING...';
 
   try {
     const res = await fetch('/api/exness/trade', {
@@ -419,9 +559,10 @@ cardsEl.addEventListener("click", async (e) => {
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({
         symbol,
-        type: signal.toLowerCase(),
+        type: signal.toLowerCase(), // "buy" or "sell" per Exness API [citation:4][citation:15]
         quantity: FIXED_LOT_SIZE,
         leverage: 100,
+        accountId,
         ...(tp != null && { takeProfit: tp }),
         ...(sl != null && { stopLoss: sl }),
         adminPassword: password,
@@ -431,10 +572,10 @@ cardsEl.addEventListener("click", async (e) => {
     const data = await res.json();
 
     if (!res.ok) {
-      if (data.error && data.error.includes('AUTH_NOT_IMPLEMENTED')) {
-        alert('Backend authentication not configured yet. Complete the Exness auth logic in _auth.js.');
-      } else if (data.error && data.error.includes('ADMIN_PASSWORD_INVALID')) {
+      if (data.error && data.error.includes('ADMIN_PASSWORD_INVALID')) {
         alert('Incorrect admin password.');
+      } else if (data.error && data.error.includes('AUTH_NOT_IMPLEMENTED')) {
+        alert('Backend authentication not configured yet.');
       } else {
         alert('Trade error: ' + (data.error || data.message || 'Unknown error'));
       }
@@ -442,16 +583,21 @@ cardsEl.addEventListener("click", async (e) => {
     }
 
     alert('Order submitted: ' + (data.orderId || data.message || 'OK'));
+    tradeDialog.close();
+    pendingTrade = null;
     refreshPL();
+
   } catch (err) {
     alert('Network error: ' + err.message);
+  } finally {
+    dialogExecute.disabled = false;
+    dialogExecute.textContent = 'EXECUTE';
   }
 });
 
 /* ------------------------------------------------------------------
-   P/L BADGE & POSITION MANAGEMENT
+   P/L BADGE
 ------------------------------------------------------------------ */
-
 plBadge.addEventListener("click", async () => {
   try {
     const res = await fetch('/api/exness/positions');
@@ -459,7 +605,7 @@ plBadge.addEventListener("click", async () => {
 
     if (!res.ok) {
       if (data.error && data.error.includes('AUTH_NOT_IMPLEMENTED')) {
-        alert('Backend authentication not configured yet. Complete the Exness auth logic in _auth.js.');
+        alert('Backend authentication not configured yet.');
       } else {
         alert('Position fetch error: ' + (data.error || data.message || 'Unknown error'));
       }
@@ -468,14 +614,11 @@ plBadge.addEventListener("click", async () => {
 
     const positions = Array.isArray(data) ? data : (data.positions || data.orders || []);
 
-    if (!positions.length) {
-      alert('No open positions.');
-      return;
-    }
+    if (!positions.length) { alert('No open positions.'); return; }
 
     const p = positions[0];
-    // Field names per unofficial docs[citation:3]: openPrice, currentPrice
-    // P/L field name is not confirmed in search results; adjust as needed
+    // Per Exness order docs, fields include openPrice, currentPrice, takeProfit, stopLoss [citation:9]
+    // P/L field name: search results do not explicitly confirm "profit"; adjust as needed
     const pl = p.profit != null ? Number(p.profit).toFixed(2) : '—';
     const action = prompt(
       `Open position:\n` +
@@ -484,7 +627,7 @@ plBadge.addEventListener("click", async () => {
       `Open: ${p.openPrice ?? '—'}\n` +
       `Current: ${p.currentPrice ?? '—'}\n` +
       `P/L: ${pl}\n\n` +
-      `Enter: "close" to close this position`,
+      `Enter "close" to close this position:`,
       ''
     );
 
@@ -522,7 +665,6 @@ async function refreshPL() {
       return;
     }
     const positions = Array.isArray(data) ? data : (data.positions || data.orders || []);
-    // P/L field name uncertain; using 'profit' as fallback
     const total = positions.reduce((sum, p) => sum + (Number(p.profit) || 0), 0);
     plBadge.textContent = 'P/L ' + (total >= 0 ? '+' : '') + total.toFixed(2);
     plBadge.className = 'pl-badge ' + (total >= 0 ? 'profit' : 'loss');
