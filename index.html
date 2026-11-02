@@ -36,6 +36,22 @@
   .icon-btn.spinning svg { animation:spin 1s linear infinite; }
   @keyframes spin { to { transform:rotate(360deg); } }
 
+  /* P/L badge next to header — new, minimal, does not alter layout */
+  .pl-badge {
+    font-size:12px;
+    color:#8a93a6;
+    cursor:pointer;
+    padding:4px 10px;
+    border-radius:999px;
+    background:#181b22;
+    border:1px solid #222633;
+    transition:color .2s, border-color .2s;
+    white-space:nowrap;
+  }
+  .pl-badge:hover { color:#e6e8ec; border-color:#2563eb; }
+  .pl-badge.profit { color:#22c55e; border-color:rgba(34,197,94,.4); }
+  .pl-badge.loss { color:#ef4444; border-color:rgba(239,68,68,.4); }
+
   .marquee-bar {
     position:sticky;
     top:0;
@@ -70,7 +86,6 @@
     .grid { grid-template-columns:1fr; }
   }
 
-  /* Card — all text uppercase */
   .card {
     background:#181b22;
     border-radius:12px;
@@ -83,7 +98,6 @@
   .row { display:flex; justify-content:space-between; font-size:13px; color:#8a93a6; margin:4px 0; }
   .row span:last-child { color:#e6e8ec; }
 
-  /* Trade levels block */
   .levels {
     margin-top:12px;
     padding:10px;
@@ -106,7 +120,6 @@
   .badge { display:inline-block; padding:2px 8px; border-radius:999px; font-size:11px; background:#222633; color:#8a93a6; margin-left:6px; }
   .news { margin-top:16px; font-size:12px; color:#6b7280; }
 
-  /* FIXED BOTTOM CTA BAR — matches page background */
   .cta-bar {
     position:fixed;
     left:0;
@@ -140,15 +153,18 @@
 
 <div class="header-row">
   <h1>FIXORIUM AI SIGNAL</h1>
-  <button id="refresh" class="icon-btn" title="Refresh signals" aria-label="Refresh signals">
-    <svg width="24" height="24" viewBox="0 0 24 24" fill="none"
-         stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
-      <line x1="20" y1="8" x2="5" y2="8"></line>
-      <polyline points="9 4 5 8 9 12"></polyline>
-      <line x1="4" y1="16" x2="19" y2="16"></line>
-      <polyline points="15 12 19 16 15 20"></polyline>
-    </svg>
-  </button>
+  <div style="display:flex;align-items:center;gap:8px;">
+    <span id="plBadge" class="pl-badge" title="Click for position details">P/L —</span>
+    <button id="refresh" class="icon-btn" title="Refresh signals" aria-label="Refresh signals">
+      <svg width="24" height="24" viewBox="0 0 24 24" fill="none"
+           stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+        <line x1="20" y1="8" x2="5" y2="8"></line>
+        <polyline points="9 4 5 8 9 12"></polyline>
+        <line x1="4" y1="16" x2="19" y2="16"></line>
+        <polyline points="15 12 19 16 15 20"></polyline>
+      </svg>
+    </button>
+  </div>
 </div>
 
 <div class="marquee-bar">
@@ -167,7 +183,6 @@
 <div class="grid" id="cards"></div>
 <div class="news" id="errorsBox"></div>
 
-<!-- FIXED BOTTOM CTA -->
 <div class="cta-bar">
   <a href="https://one.exnessonelink.com/a/abf72nul53" target="_blank" rel="noopener noreferrer">
     Create Account <span class="arrow">→</span>
@@ -189,13 +204,18 @@ const PAIRS = [
 ];
 
 const SHOW_COUNT = 3;
-
-/* Fixed lot size for every signal (micro lot = 0.01) */
 const FIXED_LOT_SIZE = 0.01;
-
-/* TP/SL multipliers on ATR */
 const SL_ATR_MULT = 1.5;
 const TP_ATR_MULT = 3.0;
+
+/* Exness symbol mapping (adjust to match your Exness account symbols) */
+const EXNESS_SYMBOL_MAP = {
+  'EUR/GBP': 'EURGBP',
+  'EUR/CHF': 'EURCHF',
+  'GBP/CHF': 'GBPCHF',
+  'AUD/NZD': 'AUDNZD',
+  'USD/CHF': 'USDCHF',
+};
 
 /* ------------------------------------------------------------------
    INDICATORS
@@ -258,7 +278,7 @@ function adx(candles, period = 14) {
 }
 
 /* ------------------------------------------------------------------
-   FETCH
+   FETCH (Twelve Data — unchanged)
 ------------------------------------------------------------------ */
 async function fetchSeries(pair) {
   const url = `https://api.twelvedata.com/time_series?symbol=${encodeURIComponent(pair.symbol)}&interval=15min&outputsize=200&apikey=${TWELVE_DATA_KEY}`;
@@ -277,7 +297,7 @@ async function fetchSeries(pair) {
 }
 
 /* ------------------------------------------------------------------
-   EVALUATE — trade levels with fixed 0.01 lot
+   EVALUATE
 ------------------------------------------------------------------ */
 function evaluate(candles) {
   const closes = candles.map(c=>c.close);
@@ -329,6 +349,7 @@ const cardsEl = document.getElementById("cards");
 const statusEl = document.getElementById("status");
 const errorsBox = document.getElementById("errorsBox");
 const refreshBtn = document.getElementById("refresh");
+const plBadge = document.getElementById("plBadge");
 
 function fmt(v) { return v === null ? "—" : v.toFixed(4); }
 
@@ -345,8 +366,9 @@ function renderCard(pair, data) {
          <div class="row"><span>LOT SIZE</span><span class="lot-val">${data.lotSize.toFixed(2)}</span></div>
        </div>`;
 
+  // Store the evaluated data on the card element for later use by execute buttons
   cardsEl.insertAdjacentHTML("beforeend", `
-    <div class="card">
+    <div class="card" data-pair="${pair.label}" data-signal="${data.signal}" data-entry="${data.entry}" data-tp="${data.tp ?? ''}" data-sl="${data.sl ?? ''}">
       <div class="pair">${pair.label}</div>
       <div class="price">${data.price.toFixed(4)}</div>
       <div class="row"><span>ATR (VOL)</span><span>${data.atr.toFixed(4)} (${data.atrPct.toFixed(2)}%)</span></div>
@@ -354,9 +376,167 @@ function renderCard(pair, data) {
       <div class="row"><span>ADX</span><span>${data.adx.toFixed(1)}</span></div>
       <div class="row"><span>EMA20 / EMA50</span><span>${data.emaFast.toFixed(4)} / ${data.emaSlow.toFixed(4)}</span></div>
       ${levelsBlock}
-      <div class="signal ${data.signal}">${data.signal}</div>
+      <div class="signal ${data.signal}" style="cursor:${data.signal !== 'NEUTRAL' ? 'pointer' : 'default'};" data-action="trade">${data.signal}</div>
       <div class="conf">CONFIDENCE: ${data.confidence}%</div>
     </div>`);
+}
+
+/* ------------------------------------------------------------------
+   EXNESS FRONTEND CALLS (backend proxy handles signing)
+------------------------------------------------------------------ */
+
+// Click on the signal block triggers confirmation and order placement
+cardsEl.addEventListener("click", async (e) => {
+  const signalEl = e.target.closest('[data-action="trade"]');
+  if (!signalEl) return;
+
+  const card = signalEl.closest('.card');
+  const signal = card.dataset.signal;
+  if (signal !== 'BUY' && signal !== 'SELL') return;
+
+  const pairLabel = card.dataset.pair;
+  const entry = parseFloat(card.dataset.entry);
+  const tp = card.dataset.tp ? parseFloat(card.dataset.tp) : null;
+  const sl = card.dataset.sl ? parseFloat(card.dataset.sl) : null;
+  const symbol = EXNESS_SYMBOL_MAP[pairLabel];
+
+  if (!symbol) {
+    alert('No Exness symbol mapping for ' + pairLabel);
+    return;
+  }
+
+  const ok = confirm(
+    `Place ${signal} order?\n\n` +
+    `Pair: ${pairLabel}\n` +
+    `Entry: ${entry.toFixed(4)}\n` +
+    `TP: ${tp ? tp.toFixed(4) : '—'}\n` +
+    `SL: ${sl ? sl.toFixed(4) : '—'}\n` +
+    `Lot: ${FIXED_LOT_SIZE}`
+  );
+  if (!ok) return;
+
+  try {
+    const res = await fetch('/api/exness/trade', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        symbol,
+        type: signal.toLowerCase(),
+        quantity: FIXED_LOT_SIZE,
+        leverage: 100, // adjust to your Exness account leverage
+        ...(tp != null && { takeProfit: tp }),
+        ...(sl != null && { stopLoss: sl }),
+      }),
+    });
+
+    const data = await res.json();
+
+    if (!res.ok) {
+      // Backend not yet implemented (signing TODO) — show friendly message
+      if (data.error && data.error.includes('signing')) {
+        alert('Backend signing not configured yet. Please complete the Exness API signing logic in your Worker.');
+      } else {
+        alert('Trade error: ' + (data.error || data.message || 'Unknown error'));
+      }
+      return;
+    }
+
+    alert('Order submitted: ' + (data.orderId || data.message || 'OK'));
+    refreshPL();
+  } catch (err) {
+    alert('Network error: ' + err.message);
+  }
+});
+
+// P/L badge click — fetch positions and show dialog for close/modify
+plBadge.addEventListener("click", async () => {
+  try {
+    const res = await fetch('/api/exness/positions');
+    const data = await res.json();
+
+    if (!res.ok) {
+      if (data.error && data.error.includes('signing')) {
+        alert('Backend signing not configured yet. Please complete the Exness API signing logic in your Worker.');
+      } else {
+        alert('Position fetch error: ' + (data.error || data.message || 'Unknown error'));
+      }
+      return;
+    }
+
+    const positions = Array.isArray(data) ? data : (data.positions || data.orders || []);
+
+    if (!positions.length) {
+      alert('No open positions.');
+      return;
+    }
+
+    // Simple dialog: show first position, offer actions
+    const p = positions[0];
+    const pl = p.profit != null ? Number(p.profit).toFixed(2) : '—';
+    const action = prompt(
+      `Open position:\n` +
+      `Symbol: ${p.symbol}\n` +
+      `Type: ${p.type}\n` +
+      `P/L: ${pl}\n\n` +
+      `Enter: "close" to close, "sl" to modify SL, "tp" to modify TP`,
+      ''
+    );
+
+    if (!action) return;
+
+    if (action.toLowerCase() === 'close') {
+      const confirmClose = confirm(`Close position ${p.orderId}?`);
+      if (!confirmClose) return;
+
+      const closeRes = await fetch('/api/exness/close', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ orderId: p.orderId }),
+      });
+      const closeData = await closeRes.json();
+      if (!closeRes.ok) {
+        alert('Close error: ' + (closeData.error || closeData.message || 'Unknown'));
+      } else {
+        alert('Position closed.');
+        refreshPL();
+      }
+    } else if (action.toLowerCase() === 'sl' || action.toLowerCase() === 'tp') {
+      const newPrice = prompt(`Enter new ${action.toUpperCase()} price:`);
+      if (!newPrice) return;
+
+      // Backend modify endpoint is not implemented in the earlier Worker skeleton.
+      // This alert tells the user what would be sent.
+      alert(
+        `Modify request would be sent:\n` +
+        `orderId: ${p.orderId}\n` +
+        `field: ${action === 'sl' ? 'stopLoss' : 'takeProfit'}\n` +
+        `value: ${newPrice}\n\n` +
+        `Note: /api/exness/modify endpoint is not yet implemented in the Worker.`
+      );
+    }
+  } catch (err) {
+    alert('P/L fetch error: ' + err.message);
+  }
+});
+
+// Refresh P/L badge
+async function refreshPL() {
+  try {
+    const res = await fetch('/api/exness/positions');
+    const data = await res.json();
+    if (!res.ok) {
+      plBadge.textContent = 'P/L —';
+      plBadge.className = 'pl-badge';
+      return;
+    }
+    const positions = Array.isArray(data) ? data : (data.positions || data.orders || []);
+    const total = positions.reduce((sum, p) => sum + (Number(p.profit) || 0), 0);
+    plBadge.textContent = 'P/L ' + (total >= 0 ? '+' : '') + total.toFixed(2);
+    plBadge.className = 'pl-badge ' + (total >= 0 ? 'profit' : 'loss');
+  } catch {
+    plBadge.textContent = 'P/L —';
+    plBadge.className = 'pl-badge';
+  }
 }
 
 /* ------------------------------------------------------------------
@@ -405,6 +585,9 @@ async function refresh() {
 
   refreshBtn.disabled = false;
   refreshBtn.classList.remove("spinning");
+
+  // Also refresh P/L on manual refresh
+  refreshPL();
 }
 refreshBtn.addEventListener("click", refresh);
 refresh();
