@@ -1,9 +1,6 @@
 // functions/api/exness/trade.js
-// POST /api/exness/trade
-// Admin-password-protected order creation.
-// Endpoint: POST /api/v1/trade/create [citation:2][citation:6]
-
 import { exnessFetch } from './_auth.js';
+import { verifySessionToken } from './auth.js';
 
 export async function onRequestPost(context) {
   const { request, env } = context;
@@ -14,24 +11,22 @@ export async function onRequestPost(context) {
 
   try {
     const body = await request.json();
-    const { symbol, type, quantity, leverage, takeProfit, stopLoss, adminPassword } = body;
+    const { symbol, type, quantity, leverage, takeProfit, stopLoss, accountId, sessionToken } = body;
 
-    // 1. Admin password verification
-    if (!env.ADMIN_TRADE_PASSWORD || adminPassword !== env.ADMIN_TRADE_PASSWORD) {
+    // Verify session token instead of raw password
+    const valid = await verifySessionToken(sessionToken, env);
+    if (!valid) {
       return new Response(JSON.stringify({
-        error: 'ADMIN_PASSWORD_INVALID: Incorrect or missing admin password'
+        error: 'SESSION_INVALID_OR_EXPIRED'
       }), { status: 403, headers: corsHeaders });
     }
 
-    // 2. Required fields
     if (!symbol || !type || !quantity || !leverage) {
       return new Response(JSON.stringify({
         error: 'Missing required fields: symbol, type, quantity, leverage'
       }), { status: 400, headers: corsHeaders });
     }
 
-    // 3. Build payload
-    // Exness expects type as lowercase "buy" or "sell"[citation:6][citation:21]
     const payload = {
       symbol,
       type: type.toLowerCase(),
@@ -41,7 +36,6 @@ export async function onRequestPost(context) {
       ...(stopLoss != null && { stopLoss: Number(stopLoss) }),
     };
 
-    // 4. Call Exness
     const exnessRes = await exnessFetch(
       'https://api.exness.com/api/v1/trade/create',
       'POST',
@@ -50,7 +44,6 @@ export async function onRequestPost(context) {
     );
 
     const data = await exnessRes.json();
-
     return new Response(JSON.stringify(data), {
       status: exnessRes.status,
       headers: corsHeaders,
