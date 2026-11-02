@@ -6,180 +6,67 @@
 <title>FIXORIUM AI SIGNAL</title>
 <style>
   body { margin:0; font-family:system-ui,sans-serif; background:#0f1115; color:#e6e8ec; padding:24px; padding-bottom:80px; }
-
-  .header-row {
-    display:flex;
-    align-items:center;
-    justify-content:space-between;
-    gap:12px;
-    margin-bottom:12px;
-  }
+  .header-row { display:flex; align-items:center; justify-content:space-between; gap:12px; margin-bottom:12px; }
   h1 { font-size:22px; margin:0; letter-spacing:.5px; }
-
-  .icon-btn {
-    background:transparent;
-    color:#e6e8ec;
-    border:0;
-    width:42px;
-    height:42px;
-    border-radius:50%;
-    cursor:pointer;
-    display:flex;
-    align-items:center;
-    justify-content:center;
-    transition:color .2s;
-    flex-shrink:0;
-    padding:0;
-  }
+  .icon-btn { background:transparent; color:#e6e8ec; border:0; width:42px; height:42px; border-radius:50%; cursor:pointer; display:flex; align-items:center; justify-content:center; transition:color .2s; flex-shrink:0; padding:0; }
   .icon-btn:hover { color:#2563eb; }
   .icon-btn:disabled { opacity:.5; cursor:not-allowed; }
   .icon-btn.spinning svg { animation:spin 1s linear infinite; }
   @keyframes spin { to { transform:rotate(360deg); } }
-
-  .pl-badge {
-    font-size:12px;
-    color:#8a93a6;
-    cursor:pointer;
-    padding:4px 10px;
-    border-radius:999px;
-    background:#181b22;
-    border:1px solid #222633;
-    transition:color .2s, border-color .2s;
-    white-space:nowrap;
-  }
-  .pl-badge:hover { color:#e6e8ec; border-color:#2563eb; }
-  .pl-badge.profit { color:#22c55e; border-color:rgba(34,197,94,.4); }
-  .pl-badge.loss { color:#ef4444; border-color:rgba(239,68,68,.4); }
-
-  .marquee-bar {
-    position:sticky;
-    top:0;
-    z-index:10;
-    background:#181b22;
-    border:1px solid #222633;
-    border-radius:8px;
-    overflow:hidden;
-    margin-bottom:20px;
-    padding:8px 0;
-  }
-  .marquee-track {
-    display:inline-block;
-    white-space:nowrap;
-    padding-left:100%;
-    animation:marquee 25s linear infinite;
-    font-size:13px;
-    color:#8a93a6;
-  }
+  .marquee-bar { position:sticky; top:0; z-index:10; background:#181b22; border:1px solid #222633; border-radius:8px; overflow:hidden; margin-bottom:20px; padding:8px 0; }
+  .marquee-track { display:inline-block; white-space:nowrap; padding-left:100%; animation:marquee 25s linear infinite; font-size:13px; color:#8a93a6; }
   .marquee-track strong { color:#e6e8ec; }
-  @keyframes marquee {
-    from { transform:translateX(0); }
-    to   { transform:translateX(-100%); }
-  }
-
-  .grid {
-    display:grid;
-    grid-template-columns:repeat(3, 1fr);
-    gap:16px;
-  }
-  @media (max-width: 900px) {
-    .grid { grid-template-columns:1fr; }
-  }
-
-  .card {
-    background:#181b22;
-    border-radius:12px;
-    padding:16px;
-    border:1px solid #222633;
-    text-transform:uppercase;
-  }
+  @keyframes marquee { from { transform:translateX(0); } to { transform:translateX(-100%); } }
+  .grid { display:grid; grid-template-columns:repeat(3, 1fr); gap:16px; }
+  @media (max-width: 900px) { .grid { grid-template-columns:1fr; } }
+  .card { background:#181b22; border-radius:12px; padding:16px; border:1px solid #222633; text-transform:uppercase; }
   .pair { font-size:18px; font-weight:600; }
   .price { font-size:22px; margin:6px 0; font-variant-numeric:tabular-nums; }
   .row { display:flex; justify-content:space-between; font-size:13px; color:#8a93a6; margin:4px 0; }
   .row span:last-child { color:#e6e8ec; }
-
-  .levels {
-    margin-top:12px;
-    padding:10px;
-    border-radius:8px;
-    background:#12151c;
-    border:1px solid #222633;
-  }
+  .levels { margin-top:12px; padding:10px; border-radius:8px; background:#12151c; border:1px solid #222633; }
   .levels .row { margin:3px 0; }
   .levels .entry-val { color:#60a5fa; }
   .levels .tp-val { color:#22c55e; }
   .levels .sl-val { color:#ef4444; }
   .levels .lot-val { color:#f59e0b; }
-
   .signal { margin-top:12px; padding:10px; border-radius:8px; text-align:center; font-weight:700; }
   .BUY { background:rgba(34,197,94,.15); color:#22c55e; }
   .SELL { background:rgba(239,68,68,.15); color:#ef4444; }
   .NEUTRAL { background:rgba(245,158,11,.15); color:#f59e0b; }
   .conf { font-size:12px; color:#8a93a6; text-align:center; margin-top:6px; }
-
   .badge { display:inline-block; padding:2px 8px; border-radius:999px; font-size:11px; background:#222633; color:#8a93a6; margin-left:6px; }
   .news { margin-top:16px; font-size:12px; color:#6b7280; }
-
-  .cta-bar {
-    position:fixed;
-    left:0;
-    right:0;
-    bottom:0;
-    z-index:50;
-    display:flex;
-    align-items:center;
-    justify-content:center;
-    padding:14px 16px;
-    background:#0f1115;
-    border-top:1px solid #222633;
-  }
-  .cta-bar a {
-    color:#e6e8ec;
-    text-decoration:none;
-    font-weight:400;
-    letter-spacing:1.2px;
-    font-size:14px;
-    text-transform:uppercase;
-    display:inline-flex;
-    align-items:center;
-    gap:8px;
-    transition:color .2s;
-  }
+  .cta-bar { position:fixed; left:0; right:0; bottom:0; z-index:50; display:flex; align-items:center; justify-content:center; padding:14px 16px; background:#0f1115; border-top:1px solid #222633; }
+  .cta-bar a { color:#e6e8ec; text-decoration:none; font-weight:400; letter-spacing:1.2px; font-size:14px; text-transform:uppercase; display:inline-flex; align-items:center; gap:8px; transition:color .2s; }
   .cta-bar a:hover { color:#2563eb; }
   .cta-bar .arrow { font-size:16px; }
-
   dialog::backdrop { background:rgba(0,0,0,.6); }
 </style>
 </head>
 <body>
 
 <div class="header-row">
-  <h1>FIXORIUM</h1>
-  <div style="display:flex;align-items:center;gap:8px;">
-    <span id="plBadge" class="pl-badge" title="Click for position details">P/L —</span>
-    <button id="refresh" class="icon-btn" title="Refresh signals" aria-label="Refresh signals">
-      <svg width="24" height="24" viewBox="0 0 24 24" fill="none"
-           stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
-        <line x1="20" y1="8" x2="5" y2="8"></line>
-        <polyline points="9 4 5 8 9 12"></polyline>
-        <line x1="4" y1="16" x2="19" y2="16"></line>
-        <polyline points="15 12 19 16 15 20"></polyline>
-      </svg>
-    </button>
-  </div>
+  <h1>FIXORIUM AI SIGNAL</h1>
+  <button id="refresh" class="icon-btn" title="Refresh signals" aria-label="Refresh signals">
+    <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+      <line x1="20" y1="8" x2="5" y2="8"></line>
+      <polyline points="9 4 5 8 9 12"></polyline>
+      <line x1="4" y1="16" x2="19" y2="16"></line>
+      <polyline points="15 12 19 16 15 20"></polyline>
+    </svg>
+  </button>
 </div>
 
 <div class="marquee-bar">
   <div class="marquee-track">
-    VOLATILITY-FILTERED PAIRS · EMA TREND · RSI MOMENTUM · ADX STRENGTH
-    &nbsp;&nbsp;|&nbsp;&nbsp;
+    VOLATILITY-FILTERED PAIRS · EMA TREND · RSI MOMENTUM · ADX STRENGTH &nbsp;&nbsp;|&nbsp;&nbsp;
     <strong>NOT FINANCIAL ADVICE. SIGNALS ARE DECISION-SUPPORT ONLY.</strong>
     &nbsp;&nbsp;&nbsp;&nbsp;
   </div>
 </div>
 
-<div style="margin-bottom:12px;">
-  <span class="badge" id="status">IDLE</span>
-</div>
+<div style="margin-bottom:12px;"><span class="badge" id="status">IDLE</span></div>
 
 <div class="grid" id="cards"></div>
 <div class="news" id="errorsBox"></div>
@@ -190,58 +77,14 @@
   </a>
 </div>
 
-<!-- Trade execution dialog: password first, then accounts, then execute -->
-<dialog id="tradeDialog" style="
-  background:#181b22; color:#e6e8ec; border:1px solid #222633;
-  border-radius:12px; padding:20px; max-width:420px; width:90%;
-  font-family:system-ui,sans-serif;
-">
-  <h3 style="margin:0 0 12px; font-size:16px;">EXECUTE TRADE</h3>
-
+<!-- Trade dialog: confirm only, no password, no accounts -->
+<dialog id="tradeDialog" style="background:#181b22; color:#e6e8ec; border:1px solid #222633; border-radius:12px; padding:20px; max-width:420px; width:90%; font-family:system-ui,sans-serif;">
+  <h3 style="margin:0 0 12px; font-size:16px;">CONFIRM TRADE</h3>
   <div id="dialogSignalInfo" style="font-size:13px; color:#8a93a6; margin-bottom:16px;"></div>
-
-  <!-- STEP 1: Password -->
-  <div id="stepPassword">
-    <label style="display:block; font-size:12px; color:#8a93a6; margin-bottom:4px;">ADMIN PASSWORD</label>
-    <input id="dialogPassword" type="password" placeholder="Enter admin password" style="
-      width:100%; padding:8px; background:#12151c; color:#e6e8ec;
-      border:1px solid #222633; border-radius:6px; font-size:14px; margin-bottom:12px;
-      box-sizing:border-box;
-    ">
-    <div id="passwordError" style="color:#ef4444; font-size:12px; margin-bottom:8px; display:none;"></div>
-    <button id="verifyPasswordBtn" style="
-      width:100%; padding:10px; background:#2563eb; color:#fff;
-      border:0; border-radius:6px; cursor:pointer; font-size:13px; font-weight:600;
-    ">VERIFY PASSWORD</button>
-    <button id="dialogCancelPassword" style="
-      width:100%; padding:10px; background:#222633; color:#e6e8ec;
-      border:0; border-radius:6px; cursor:pointer; font-size:13px; margin-top:8px;
-    ">CANCEL</button>
-  </div>
-
-  <!-- STEP 2: Accounts + Execute (hidden until password verified) -->
-  <div id="stepAccounts" style="display:none;">
-    <label style="display:block; font-size:12px; color:#8a93a6; margin-bottom:4px;">ACCOUNT</label>
-    <select id="dialogAccountSelect" style="
-      width:100%; padding:8px; background:#12151c; color:#e6e8ec;
-      border:1px solid #222633; border-radius:6px; font-size:14px; margin-bottom:12px;
-    "></select>
-
-    <div id="dialogAccountDetail" style="
-      background:#12151c; border:1px solid #222633; border-radius:8px;
-      padding:10px; font-size:12px; color:#8a93a6; margin-bottom:16px;
-    ">Loading account details...</div>
-
-    <div style="display:flex; gap:8px;">
-      <button id="dialogCancel" style="
-        flex:1; padding:10px; background:#222633; color:#e6e8ec;
-        border:0; border-radius:6px; cursor:pointer; font-size:13px;
-      ">CANCEL</button>
-      <button id="dialogExecute" style="
-        flex:1; padding:10px; background:#22c55e; color:#fff;
-        border:0; border-radius:6px; cursor:pointer; font-size:13px; font-weight:600;
-      ">EXECUTE</button>
-    </div>
+  <div id="dialogError" style="color:#ef4444; font-size:12px; margin-bottom:8px; display:none;"></div>
+  <div style="display:flex; gap:8px;">
+    <button id="dialogCancel" style="flex:1; padding:10px; background:#222633; color:#e6e8ec; border:0; border-radius:6px; cursor:pointer; font-size:13px;">CANCEL</button>
+    <button id="dialogExecute" style="flex:1; padding:10px; background:#22c55e; color:#fff; border:0; border-radius:6px; cursor:pointer; font-size:13px; font-weight:600;">EXECUTE</button>
   </div>
 </dialog>
 
@@ -250,7 +93,6 @@
    CONFIG
 ------------------------------------------------------------------ */
 const TWELVE_DATA_KEY = "1d6484a8e4204e15ac6e63de1192a73e";
-
 const PAIRS = [
   { label: "EUR/GBP", symbol: "EUR/GBP" },
   { label: "EUR/CHF", symbol: "EUR/CHF" },
@@ -258,19 +100,19 @@ const PAIRS = [
   { label: "AUD/NZD", symbol: "AUD/NZD" },
   { label: "USD/CHF", symbol: "USD/CHF" },
 ];
-
 const SHOW_COUNT = 3;
 const FIXED_LOT_SIZE = 0.01;
 const SL_ATR_MULT = 1.5;
 const TP_ATR_MULT = 3.0;
 
+// Exness instrument names (no slash)
 const EXNESS_SYMBOL_MAP = {
-  'EUR/GBP': 'EURGBP',
-  'EUR/CHF': 'EURCHF',
-  'GBP/CHF': 'GBPCHF',
-  'AUD/NZD': 'AUDNZD',
-  'USD/CHF': 'USDCHF',
+  'EUR/GBP': 'EURGBP', 'EUR/CHF': 'EURCHF', 'GBP/CHF': 'GBPCHF',
+  'AUD/NZD': 'AUDNZD', 'USD/CHF': 'USDCHF',
 };
+
+// Your Exness account ID (from PA)
+const EXNESS_ACCOUNT_ID = '11724101';
 
 /* ------------------------------------------------------------------
    INDICATORS
@@ -296,11 +138,7 @@ function rsi(closes, period = 14) {
 function atr(candles, period = 14) {
   const trs=[];
   for (let i=1;i<candles.length;i++){
-    trs.push(Math.max(
-      candles[i].high-candles[i].low,
-      Math.abs(candles[i].high-candles[i-1].close),
-      Math.abs(candles[i].low-candles[i-1].close)
-    ));
+    trs.push(Math.max(candles[i].high-candles[i].low, Math.abs(candles[i].high-candles[i-1].close), Math.abs(candles[i].low-candles[i-1].close)));
   }
   return trs.slice(-period).reduce((a,b)=>a+b,0)/period;
 }
@@ -311,11 +149,7 @@ function adx(candles, period = 14) {
     const dn=candles[i-1].low-candles[i].low;
     pDM.push(up>dn&&up>0?up:0);
     mDM.push(dn>up&&dn>0?dn:0);
-    trs.push(Math.max(
-      candles[i].high-candles[i].low,
-      Math.abs(candles[i].high-candles[i-1].close),
-      Math.abs(candles[i].low-candles[i-1].close)
-    ));
+    trs.push(Math.max(candles[i].high-candles[i].low, Math.abs(candles[i].high-candles[i-1].close), Math.abs(candles[i].low-candles[i-1].close)));
   }
   let trS=trs.slice(0,period).reduce((a,b)=>a+b,0);
   let pS =pDM.slice(0,period).reduce((a,b)=>a+b,0);
@@ -333,7 +167,7 @@ function adx(candles, period = 14) {
 }
 
 /* ------------------------------------------------------------------
-   FETCH (Twelve Data)
+   FETCH & EVALUATE
 ------------------------------------------------------------------ */
 async function fetchSeries(pair) {
   const url = `https://api.twelvedata.com/time_series?symbol=${encodeURIComponent(pair.symbol)}&interval=15min&outputsize=200&apikey=${TWELVE_DATA_KEY}`;
@@ -342,18 +176,9 @@ async function fetchSeries(pair) {
   if (json.status === "error") throw new Error(json.message || "API error");
   if (!json.values || !json.values.length) throw new Error("Empty values array");
   const rows = json.values.slice().reverse();
-  return {
-    candles: rows.map(r => ({
-      high: parseFloat(r.high),
-      low: parseFloat(r.low),
-      close: parseFloat(r.close),
-    })),
-  };
+  return { candles: rows.map(r => ({ high: parseFloat(r.high), low: parseFloat(r.low), close: parseFloat(r.close) })) };
 }
 
-/* ------------------------------------------------------------------
-   EVALUATE
------------------------------------------------------------------- */
 function evaluate(candles) {
   const closes = candles.map(c=>c.close);
   const price = closes[closes.length-1];
@@ -375,25 +200,15 @@ function evaluate(candles) {
 
   const slDistance = a * SL_ATR_MULT;
   const tpDistance = a * TP_ATR_MULT;
-
   const entry = price;
-  let tp = null;
-  let sl = null;
-
-  if (signal === "BUY") {
-    tp = price + tpDistance;
-    sl = price - slDistance;
-  } else if (signal === "SELL") {
-    tp = price - tpDistance;
-    sl = price + slDistance;
-  }
+  let tp = null, sl = null;
+  if (signal === "BUY") { tp = price + tpDistance; sl = price - slDistance; }
+  else if (signal === "SELL") { tp = price - tpDistance; sl = price + slDistance; }
 
   return {
-    signal,
-    confidence: Math.min(95, Math.round((Math.abs(score)/4)*100)),
+    signal, confidence: Math.min(95, Math.round((Math.abs(score)/4)*100)),
     price, atr: a, atrPct: (a/price)*100, rsi: r, adx: d, emaFast: eFast, emaSlow: eSlow,
-    entry, tp, sl,
-    lotSize: FIXED_LOT_SIZE,
+    entry, tp, sl, lotSize: FIXED_LOT_SIZE,
   };
 }
 
@@ -404,16 +219,12 @@ const cardsEl = document.getElementById("cards");
 const statusEl = document.getElementById("status");
 const errorsBox = document.getElementById("errorsBox");
 const refreshBtn = document.getElementById("refresh");
-const plBadge = document.getElementById("plBadge");
 
 function fmt(v) { return v === null ? "—" : v.toFixed(4); }
 
 function renderCard(pair, data) {
   const levelsBlock = data.signal === "NEUTRAL"
-    ? `<div class="levels">
-         <div class="row"><span>ENTRY / TP / SL</span><span>— NO TRADE —</span></div>
-         <div class="row"><span>LOT SIZE</span><span class="lot-val">${data.lotSize.toFixed(2)}</span></div>
-       </div>`
+    ? `<div class="levels"><div class="row"><span>ENTRY / TP / SL</span><span>— NO TRADE —</span></div><div class="row"><span>LOT SIZE</span><span class="lot-val">${data.lotSize.toFixed(2)}</span></div></div>`
     : `<div class="levels">
          <div class="row"><span>ENTRY</span><span class="entry-val">${fmt(data.entry)}</span></div>
          <div class="row"><span>TAKE PROFIT</span><span class="tp-val">${fmt(data.tp)}</span></div>
@@ -436,29 +247,19 @@ function renderCard(pair, data) {
 }
 
 /* ------------------------------------------------------------------
-   TRADE DIALOG — password first, then accounts, then execute
+   TRADE DIALOG — confirm only
 ------------------------------------------------------------------ */
 const tradeDialog = document.getElementById('tradeDialog');
 const dialogSignalInfo = document.getElementById('dialogSignalInfo');
-const stepPassword = document.getElementById('stepPassword');
-const stepAccounts = document.getElementById('stepAccounts');
-const dialogPassword = document.getElementById('dialogPassword');
-const passwordError = document.getElementById('passwordError');
-const verifyPasswordBtn = document.getElementById('verifyPasswordBtn');
-const dialogAccountSelect = document.getElementById('dialogAccountSelect');
-const dialogAccountDetail = document.getElementById('dialogAccountDetail');
+const dialogError = document.getElementById('dialogError');
 const dialogCancel = document.getElementById('dialogCancel');
-const dialogCancelPassword = document.getElementById('dialogCancelPassword');
 const dialogExecute = document.getElementById('dialogExecute');
 
 let pendingTrade = null;
-let loadedAccounts = [];
-let sessionToken = null;
 
 cardsEl.addEventListener("click", async (e) => {
   const signalEl = e.target.closest('[data-action="trade"]');
   if (!signalEl) return;
-
   const card = signalEl.closest('.card');
   const signal = card.dataset.signal;
   if (signal !== 'BUY' && signal !== 'SELL') return;
@@ -468,285 +269,57 @@ cardsEl.addEventListener("click", async (e) => {
   const tp = card.dataset.tp ? parseFloat(card.dataset.tp) : null;
   const sl = card.dataset.sl ? parseFloat(card.dataset.sl) : null;
   const symbol = EXNESS_SYMBOL_MAP[pairLabel];
-
-  if (!symbol) {
-    alert('No Exness symbol mapping for ' + pairLabel);
-    return;
-  }
+  if (!symbol) { alert('No Exness symbol mapping for ' + pairLabel); return; }
 
   pendingTrade = { signal, pairLabel, entry, tp, sl, symbol };
-  sessionToken = null;
-
-  dialogSignalInfo.innerHTML = `
-    <strong style="color:#e6e8ec;">${signal} ${pairLabel}</strong><br>
-    Entry: ${entry.toFixed(4)} · TP: ${tp ? tp.toFixed(4) : '—'} · SL: ${sl ? sl.toFixed(4) : '—'}
-  `;
-
-  dialogPassword.value = '';
-  passwordError.style.display = 'none';
-  stepPassword.style.display = 'block';
-  stepAccounts.style.display = 'none';
-
+  dialogSignalInfo.innerHTML = `<strong style="color:#e6e8ec;">${signal} ${pairLabel}</strong><br>Entry: ${entry.toFixed(4)} · TP: ${tp ? tp.toFixed(4) : '—'} · SL: ${sl ? sl.toFixed(4) : '—'}`;
+  dialogError.style.display = 'none';
   tradeDialog.showModal();
 });
 
-verifyPasswordBtn.addEventListener('click', async () => {
-  const pw = dialogPassword.value;
-  if (!pw) {
-    passwordError.textContent = 'Password required.';
-    passwordError.style.display = 'block';
-    return;
-  }
-
-  verifyPasswordBtn.disabled = true;
-  verifyPasswordBtn.textContent = 'VERIFYING...';
-
-  try {
-    const res = await fetch('/api/exness/auth', {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ adminPassword: pw }),
-    });
-    const data = await res.json();
-
-    if (!res.ok) {
-      passwordError.textContent = data.error === 'ADMIN_PASSWORD_INVALID'
-        ? 'Incorrect password.'
-        : (data.error || 'Verification failed.');
-      passwordError.style.display = 'block';
-      return;
-    }
-
-    sessionToken = data.token;
-    stepPassword.style.display = 'none';
-    stepAccounts.style.display = 'block';
-    await loadAccountsForDialog();
-
-  } catch (err) {
-    passwordError.textContent = 'Network error: ' + err.message;
-    passwordError.style.display = 'block';
-  } finally {
-    verifyPasswordBtn.disabled = false;
-    verifyPasswordBtn.textContent = 'VERIFY PASSWORD';
-  }
-});
-
-async function loadAccountsForDialog() {
-  dialogAccountDetail.textContent = 'Loading account details...';
-  dialogAccountSelect.innerHTML = '<option value="">Loading...</option>';
-
-  try {
-    const res = await fetch('/api/exness/accounts?sessionToken=' + encodeURIComponent(sessionToken));
-    const data = await res.json();
-
-    if (!res.ok) {
-      if (data.error === 'SESSION_INVALID_OR_EXPIRED') {
-        dialogAccountDetail.textContent = 'Session expired. Please re-enter password.';
-        stepPassword.style.display = 'block';
-        stepAccounts.style.display = 'none';
-      } else {
-        dialogAccountSelect.innerHTML = '<option value="">— Load failed —</option>';
-        dialogAccountDetail.textContent = 'Error: ' + (data.error || 'Unknown error');
-      }
-      return;
-    }
-
-    const accounts = data.accounts || data || [];
-    loadedAccounts = accounts;
-
-    if (!accounts.length) {
-      dialogAccountSelect.innerHTML = '<option value="">— No accounts —</option>';
-      dialogAccountDetail.textContent = 'No trading accounts found.';
-      return;
-    }
-
-    dialogAccountSelect.innerHTML = accounts.map(a =>
-      `<option value="${a.id || a.accountId}">${a.id || a.accountId} — ${a.currency || 'USD'}</option>`
-    ).join('');
-
-    renderAccountDetail(accounts[0]);
-    dialogAccountSelect.onchange = () => {
-      const selectedId = dialogAccountSelect.value;
-      const acc = loadedAccounts.find(a => String(a.id || a.accountId) === selectedId);
-      if (acc) renderAccountDetail(acc);
-    };
-
-  } catch (err) {
-    dialogAccountSelect.innerHTML = '<option value="">— Network error —</option>';
-    dialogAccountDetail.textContent = 'Network error: ' + err.message;
-  }
-}
-
-function renderAccountDetail(acc) {
-  const balance = acc.balance != null ? Number(acc.balance).toFixed(2) : '—';
-  const equity = acc.equity != null ? Number(acc.equity).toFixed(2) : '—';
-  const margin = acc.margin != null ? Number(acc.margin).toFixed(2) : '—';
-  const freeMargin = acc.freeMargin != null ? Number(acc.freeMargin).toFixed(2) : '—';
-  const currency = acc.currency || 'USD';
-  const leverage = acc.leverage || '—';
-
-  dialogAccountDetail.innerHTML = `
-    <div style="display:flex; justify-content:space-between; margin:2px 0;">
-      <span>BALANCE</span><span style="color:#e6e8ec;">${balance} ${currency}</span>
-    </div>
-    <div style="display:flex; justify-content:space-between; margin:2px 0;">
-      <span>EQUITY</span><span style="color:#e6e8ec;">${equity} ${currency}</span>
-    </div>
-    <div style="display:flex; justify-content:space-between; margin:2px 0;">
-      <span>MARGIN</span><span style="color:#e6e8ec;">${margin} ${currency}</span>
-    </div>
-    <div style="display:flex; justify-content:space-between; margin:2px 0;">
-      <span>FREE MARGIN</span><span style="color:#e6e8ec;">${freeMargin} ${currency}</span>
-    </div>
-    <div style="display:flex; justify-content:space-between; margin:2px 0;">
-      <span>LEVERAGE</span><span style="color:#e6e8ec;">${leverage}</span>
-    </div>
-  `;
-}
+dialogCancel.addEventListener('click', () => { tradeDialog.close(); pendingTrade = null; });
 
 dialogExecute.addEventListener('click', async () => {
-  const accountId = dialogAccountSelect.value;
-
-  if (!accountId) { alert('No account selected.'); return; }
   if (!pendingTrade) { tradeDialog.close(); return; }
-  if (!sessionToken) { alert('Session expired. Please re-enter password.'); return; }
-
   const { signal, symbol, tp, sl } = pendingTrade;
 
   dialogExecute.disabled = true;
-  dialogExecute.textContent = 'EXECUTING...';
+  dialogExecute.textContent = 'SENDING...';
+  dialogError.style.display = 'none';
 
   try {
     const res = await fetch('/api/exness/trade', {
       method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
+      headers: { 'Content-Type': 'application/json', 'Accept': 'application/json' },
       body: JSON.stringify({
-        symbol,
-        type: signal.toLowerCase(),
-        quantity: FIXED_LOT_SIZE,
-        leverage: 100,
-        accountId,
-        ...(tp != null && { takeProfit: tp }),
-        ...(sl != null && { stopLoss: sl }),
-        sessionToken,
+        accountId: EXNESS_ACCOUNT_ID,
+        instrument: symbol,
+        side: signal.toLowerCase(),        // "buy" or "sell"
+        volume: String(FIXED_LOT_SIZE),    // decimal string
+        takeProfitPrice: tp != null ? tp.toFixed(5) : null,  // decimal string
+        stopLossPrice: sl != null ? sl.toFixed(5) : null,
       }),
     });
-
     const data = await res.json();
 
     if (!res.ok) {
-      if (data.error === 'SESSION_INVALID_OR_EXPIRED') {
-        alert('Session expired. Please re-enter password.');
-        stepPassword.style.display = 'block';
-        stepAccounts.style.display = 'none';
-      } else {
-        alert('Trade error: ' + (data.error || data.message || 'Unknown error'));
-      }
+      dialogError.textContent = data.error || data.detail?.error_message || 'Trade failed';
+      dialogError.style.display = 'block';
       return;
     }
 
-    alert('Order submitted: ' + (data.orderId || data.message || 'OK'));
+    alert('Order accepted. Operation ID: ' + (data.operation_id || '—'));
     tradeDialog.close();
     pendingTrade = null;
-    sessionToken = null;
-    refreshPL();
 
   } catch (err) {
-    alert('Network error: ' + err.message);
+    dialogError.textContent = 'Network error: ' + err.message;
+    dialogError.style.display = 'block';
   } finally {
     dialogExecute.disabled = false;
     dialogExecute.textContent = 'EXECUTE';
   }
 });
-
-dialogCancel.addEventListener('click', () => {
-  tradeDialog.close();
-  pendingTrade = null;
-  sessionToken = null;
-});
-
-dialogCancelPassword.addEventListener('click', () => {
-  tradeDialog.close();
-  pendingTrade = null;
-  sessionToken = null;
-});
-
-/* ------------------------------------------------------------------
-   P/L BADGE & POSITION MANAGEMENT
------------------------------------------------------------------- */
-plBadge.addEventListener("click", async () => {
-  try {
-    const res = await fetch('/api/exness/positions');
-    const data = await res.json();
-
-    if (!res.ok) {
-      if (data.error && data.error.includes('AUTH_NOT_IMPLEMENTED')) {
-        alert('Backend authentication not configured yet.');
-      } else {
-        alert('Position fetch error: ' + (data.error || data.message || 'Unknown error'));
-      }
-      return;
-    }
-
-    const positions = Array.isArray(data) ? data : (data.positions || data.orders || []);
-
-    if (!positions.length) { alert('No open positions.'); return; }
-
-    const p = positions[0];
-    const pl = p.profit != null ? Number(p.profit).toFixed(2) : '—';
-    const action = prompt(
-      `Open position:\n` +
-      `Symbol: ${p.symbol}\n` +
-      `Type: ${p.type}\n` +
-      `Open: ${p.openPrice ?? '—'}\n` +
-      `Current: ${p.currentPrice ?? '—'}\n` +
-      `P/L: ${pl}\n\n` +
-      `Enter "close" to close this position:`,
-      ''
-    );
-
-    if (!action) return;
-
-    if (action.toLowerCase() === 'close') {
-      const pw = prompt('Enter admin password to close position:');
-      if (!pw) return;
-
-      const closeRes = await fetch('/api/exness/close', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ orderId: p.orderId, adminPassword: pw }),
-      });
-      const closeData = await closeRes.json();
-      if (!closeRes.ok) {
-        alert('Close error: ' + (closeData.error || closeData.message || 'Unknown'));
-      } else {
-        alert('Position closed.');
-        refreshPL();
-      }
-    }
-  } catch (err) {
-    alert('P/L fetch error: ' + err.message);
-  }
-});
-
-async function refreshPL() {
-  try {
-    const res = await fetch('/api/exness/positions');
-    const data = await res.json();
-    if (!res.ok) {
-      plBadge.textContent = 'P/L —';
-      plBadge.className = 'pl-badge';
-      return;
-    }
-    const positions = Array.isArray(data) ? data : (data.positions || data.orders || []);
-    const total = positions.reduce((sum, p) => sum + (Number(p.profit) || 0), 0);
-    plBadge.textContent = 'P/L ' + (total >= 0 ? '+' : '') + total.toFixed(2);
-    plBadge.className = 'pl-badge ' + (total >= 0 ? 'profit' : 'loss');
-  } catch {
-    plBadge.textContent = 'P/L —';
-    plBadge.className = 'pl-badge';
-  }
-}
 
 /* ------------------------------------------------------------------
    MAIN REFRESH
@@ -759,43 +332,31 @@ async function refresh() {
 
   if (!TWELVE_DATA_KEY) {
     statusEl.textContent = "MISSING API KEY";
-    cardsEl.innerHTML = `<div class="card">PASTE YOUR TWELVE DATA API KEY INTO <code>TWELVE_DATA_KEY</code> AND REDEPLOY.</div>`;
+    cardsEl.innerHTML = `<div class="card">PASTE YOUR TWELVE DATA API KEY INTO TWELVE_DATA_KEY AND REDEPLOY.</div>`;
     refreshBtn.disabled = false;
     refreshBtn.classList.remove("spinning");
     return;
   }
 
   statusEl.textContent = "LOADING…";
-
   const results = await Promise.all(PAIRS.map(async p => {
-    try {
-      const { candles } = await fetchSeries(p);
-      return { pair: p, ok: true, data: evaluate(candles) };
-    } catch (err) {
-      return { pair: p, ok: false, error: err.message };
-    }
+    try { const { candles } = await fetchSeries(p); return { pair: p, ok: true, data: evaluate(candles) }; }
+    catch (err) { return { pair: p, ok: false, error: err.message }; }
   }));
 
   const valid = results.filter(r => r.ok).map(r => ({ pair: r.pair, ...r.data }));
   valid.sort((a,b) => a.atrPct - b.atrPct);
-
-  const top = valid.slice(0, SHOW_COUNT);
-  top.forEach(r => renderCard(r.pair, r));
+  valid.slice(0, SHOW_COUNT).forEach(r => renderCard(r.pair, r));
 
   const failed = results.filter(r => !r.ok);
-  if (failed.length) {
-    errorsBox.textContent = "SKIPPED (DATA UNAVAILABLE): " +
-      failed.map(f => `${f.pair.label} — ${f.error}`).join(" · ");
-  }
+  if (failed.length) errorsBox.textContent = "SKIPPED: " + failed.map(f => `${f.pair.label} — ${f.error}`).join(" · ");
 
   statusEl.textContent = valid.length
-    ? `UPDATED ${new Date().toLocaleTimeString()} · SHOWING ${top.length} LOWEST-VOL PAIRS`
+    ? `UPDATED ${new Date().toLocaleTimeString()} · SHOWING ${Math.min(valid.length, SHOW_COUNT)} LOWEST-VOL PAIRS`
     : `UPDATED ${new Date().toLocaleTimeString()} · NO VALID DATA`;
 
   refreshBtn.disabled = false;
   refreshBtn.classList.remove("spinning");
-
-  refreshPL();
 }
 refreshBtn.addEventListener("click", refresh);
 refresh();
