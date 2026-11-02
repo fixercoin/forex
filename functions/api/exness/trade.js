@@ -8,7 +8,7 @@
 
 import { exnessFetch } from './_auth.js';
 
-const EXNESS_ACCOUNT_ID = '11724101';
+const EXNESS_ACCOUNT_ID = '16000620992';
 
 export async function onRequestPost(context) {
   const { request, env } = context;
