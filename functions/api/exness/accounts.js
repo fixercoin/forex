@@ -1,10 +1,7 @@
 // functions/api/exness/accounts.js
-// GET /api/exness/accounts
-// Returns your account's configuration by:
-// 1. Discovering the Access Point host for your account
-// 2. Calling /v1/configuration/accounts/{accountId}/account on that host
-//
-// Account ID is hardcoded as 11724101 since you have a single trading account.
+// GET /api/exness/accounts?sessionToken=...
+// Returns account config for account 11724101 via Access Point discovery.
+// Every error path returns JSON — never HTML.
 
 import { exnessFetch } from './_auth.js';
 import { verifySessionToken } from './auth.js';
@@ -18,86 +15,73 @@ export async function onRequestGet(context) {
     'Content-Type': 'application/json',
   };
 
-  // Session gate
-  const url = new URL(request.url);
-  const sessionToken = url.searchParams.get('sessionToken');
-  const valid = await verifySessionToken(sessionToken, env);
-  if (!valid) {
-    return new Response(JSON.stringify({
-      error: 'SESSION_INVALID_OR_EXPIRED'
-    }), { status: 403, headers: corsHeaders });
-  }
-
   try {
-    // Step 1: Discover the Access Point for this account.
-    // The SDK calls this getTradingAccessPoint(accountId) [citation:1].
-    // The path is likely /v1/configuration/accounts/{accountId}/access-point
-    // or similar — verify in your Exness developer portal OpenAPI spec.
-    const accessPointRes = await exnessFetch(
+    // 1. Session gate
+    const url = new URL(request.url);
+    const sessionToken = url.searchParams.get('sessionToken');
+    const valid = await verifySessionToken(sessionToken, env);
+
+    if (!valid) {
+      return new Response(JSON.stringify({ error: 'SESSION_INVALID_OR_EXPIRED' }), {
+        status: 403, headers: corsHeaders,
+      });
+    }
+
+    // 2. Discover Access Point for this account
+    // SDK uses client.configuration.getTradingAccessPoint(accountId) 
+    // Verify exact path in your Exness OpenAPI spec.
+    const apRes = await exnessFetch(
       `https://api.exness.com/v1/configuration/accounts/${EXNESS_ACCOUNT_ID}/access-point`,
-      'GET',
-      null,
-      env
+      'GET', null, env
     );
 
-    if (!accessPointRes.ok) {
-      const errData = await accessPointRes.json().catch(() => ({}));
+    if (!apRes.ok) {
+      const detail = await apRes.json().catch(() => ({}));
       return new Response(JSON.stringify({
-        error: 'ACCESS_POINT_DISCOVERY_FAILED',
-        detail: errData
+        error: 'ACCESS_POINT_DISCOVERY_FAILED', status: apRes.status, detail,
       }), { status: 502, headers: corsHeaders });
     }
 
-    const accessPointData = await accessPointRes.json();
-    // Expected field: access_point (a hostname like "ap-xxxx.exness.com")
-    const accessPointHost = accessPointData.access_point;
-    if (!accessPointHost) {
+    const apData = await apRes.json();
+    const host = apData.access_point;
+    if (!host) {
       return new Response(JSON.stringify({
-        error: 'ACCESS_POINT_MISSING',
-        detail: accessPointData
+        error: 'ACCESS_POINT_MISSING', detail: apData,
       }), { status: 502, headers: corsHeaders });
     }
 
-    // Step 2: Fetch account configuration from the Access Point host.
-    // Official example path: /v1/configuration/accounts/{id}/account [citation:1]
-    const accountRes = await exnessFetch(
-      `https://${accessPointHost}/v1/configuration/accounts/${EXNESS_ACCOUNT_ID}/account`,
-      'GET',
-      null,
-      env
+    // 3. Fetch account config from Access Point host
+    // Official example path: /v1/configuration/accounts/{id}/account
+    const accRes = await exnessFetch(
+      `https://${host}/v1/configuration/accounts/${EXNESS_ACCOUNT_ID}/account`,
+      'GET', null, env
     );
 
-    const accountData = await accountRes.json();
+    const accData = await accRes.json().catch(() => ({}));
 
-    if (!accountRes.ok) {
+    if (!accRes.ok) {
       return new Response(JSON.stringify({
-        error: 'ACCOUNT_FETCH_FAILED',
-        detail: accountData
-      }), { status: accountRes.status, headers: corsHeaders });
+        error: 'ACCOUNT_FETCH_FAILED', status: accRes.status, detail: accData,
+      }), { status: accRes.status, headers: corsHeaders });
     }
 
-    // The official example response shape:
-    // { account_id, currency, leverage, margin_call_level, stop_out_level } [citation:1]
-    // We wrap it in an "accounts" array so the frontend dialog can iterate.
+    // 4. Return as accounts array for the frontend dialog
     return new Response(JSON.stringify({
       accounts: [{
-        id: accountData.account_id || EXNESS_ACCOUNT_ID,
-        currency: accountData.currency || 'USD',
-        leverage: accountData.leverage || '—',
-        // The configuration endpoint does NOT return balance/equity.
-        // Balance/equity must be fetched separately from a trading/account-summary endpoint.
-        // Placeholder until you find the correct balance endpoint.
-        balance: '—',
+        id: accData.account_id || EXNESS_ACCOUNT_ID,
+        currency: accData.currency || 'USD',
+        leverage: accData.leverage || '—',
+        balance: '—',   // config endpoint has no balance; separate endpoint needed
         equity: '—',
         margin: '—',
         freeMargin: '—',
-      }]
+      }],
     }), { status: 200, headers: corsHeaders });
 
   } catch (err) {
-    return new Response(JSON.stringify({ error: err.message }), {
-      status: 500,
-      headers: corsHeaders,
-    });
+    // Global catch: any uncaught error becomes a JSON 500, not a 502 HTML page
+    return new Response(JSON.stringify({
+      error: 'UNCAUGHT', message: err.message,
+    }), { status: 500, headers: corsHeaders });
   }
 }
