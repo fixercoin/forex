@@ -1,21 +1,21 @@
 // functions/api/exness/_auth.js
 // Exness Ed25519 signed request authentication.
-// Based on official Exness Authentication documentation:
-// - Headers: EXN-API-KEY, EXN-IDEMPOTENCY-KEY, EXN-TIMESTAMP, EXN-SIGN-VERSION, EXN-DATA, EXN-SIGN
-// - EXN-DATA is base64url(JSON payload) without padding
-// - EXN-SIGN is Ed25519 signature of the decoded EXN-DATA payload bytes, base64url without padding
-// - body_hash is SHA-256 of exact request body, base64url without padding
-// - Empty body hash: 47DEQpj8HBSa-_TImW-5JCeuQeRkm5NMpJWZG3hSuFU
-// - Timestamp in Unix milliseconds, must match timestamp inside EXN-DATA
-// - Fresh timestamp and signature for every request
+// Based on official docs and community SDK references.
+//
+// Signed headers required by Exness:
+//   EXN-API-KEY, EXN-IDEMPOTENCY-KEY, EXN-TIMESTAMP,
+//   EXN-SIGN-VERSION (1), EXN-DATA (base64url JSON payload),
+//   EXN-SIGN (Ed25519 signature of payload bytes, base64url)
+//
+// Important notes from exness-sdk :
+// - Timestamp tolerance is asymmetric: 0 <= server_now - signed_timestamp <= 3000ms.
+//   If your clock is ahead, requests fail with AUTH_INVALID_API_KEY.
+// - Prices must be normalized to instrument precision (point_digits) before
+//   sending stop_loss/take_profit, or you get REQUEST_INVALID_PRICE.
+// - Trading access point must be discovered per account.
 
 /**
  * Build signed headers for an Exness API request.
- * @param {string} method   - HTTP method (GET/POST)
- * @param {string} path     - Request path with query string exactly as sent (e.g. "/v1/trade/orders")
- * @param {string|null} body - Exact request body string, or null for GET
- * @param {Object} env      - Cloudflare env (EXNESS_API_KEY, EXNESS_SECRET_KEY)
- * @returns {Promise<Object>} headers
  */
 export async function buildExnessAuthHeaders(method, path, body, env) {
   const apiKey = env.EXNESS_API_KEY;
@@ -25,10 +25,13 @@ export async function buildExnessAuthHeaders(method, path, body, env) {
     throw new Error('EXNESS_CREDENTIALS_MISSING');
   }
 
-  const timestamp = Date.now();
+  // Clock offset: Exness is strict about client clock being ahead.
+  // The SDK uses clockOffsetMs to correct this . 
+  // If you get AUTH_INVALID_API_KEY with timestamp tolerance errors,
+  // set EXNESS_CLOCK_OFFSET_MS in your env (negative value if your clock is ahead).
+  const clockOffsetMs = Number(env.EXNESS_CLOCK_OFFSET_MS || '0');
+  const timestamp = Date.now() + clockOffsetMs;
 
-  // For signed GET requests, idempotency key must be empty string.
-  // For mutating requests (POST/PUT/DELETE), it must be non-empty.
   const upperMethod = method.toUpperCase();
   const idempotencyKey = upperMethod === 'GET' ? '' : generateIdempotencyKey();
 
@@ -43,23 +46,20 @@ export async function buildExnessAuthHeaders(method, path, body, env) {
     bodyHash = '47DEQpj8HBSa-_TImW-5JCeuQeRkm5NMpJWZG3hSuFU';
   }
 
-  // Build the EXN-DATA payload object exactly as specified
   const payload = {
     api_key: apiKey,
     idempotency_key: idempotencyKey,
-    timestamp: timestamp,
-    sign_version: 1,
+    timestamp: timestamp,       // JSON number, not string 
+    sign_version: 1,            // JSON number
     method: upperMethod,
-    path: path,
+    path: path,                 // path with query, exactly as sent
     body_hash: bodyHash,
   };
 
-  // Serialize to JSON bytes (this exact byte sequence is what gets signed)
+  // Serialize once; sign these exact bytes
   const payloadBytes = new TextEncoder().encode(JSON.stringify(payload));
 
-  // Decode the secret key as an Ed25519 seed.
-  // The official docs say "Ed25519 private key" but do not specify encoding.
-  // Common Exness format is base64url-encoded 32-byte seed.
+  // Decode Secret Key into 32-byte Ed25519 seed
   const seed = decodeSeed(secretKey);
 
   const cryptoKey = await crypto.subtle.importKey(
@@ -70,7 +70,6 @@ export async function buildExnessAuthHeaders(method, path, body, env) {
     ['sign']
   );
 
-  // Sign the decoded EXN-DATA payload bytes (NOT the base64url string)
   const signatureBuffer = await crypto.subtle.sign(
     'Ed25519',
     cryptoKey,
@@ -89,49 +88,71 @@ export async function buildExnessAuthHeaders(method, path, body, env) {
 }
 
 /**
- * Decode the Secret Key into a 32-byte Ed25519 seed.
- * Exness does not document the encoding explicitly.
- * Try base64url first (most likely), then hex, then raw.
+ * Decode Secret Key into 32-byte Ed25519 seed.
+ * Handles PEM (PKCS#8), base64url, hex, and raw formats.
  */
 function decodeSeed(secretKey) {
-  // Try base64url (with or without padding)
+  const key = secretKey.trim();
+
+  // 1. PEM / PKCS#8 format (-----BEGIN PRIVATE KEY-----)
+  if (key.includes('-----BEGIN')) {
+    const b64Body = key
+      .replace(/-----BEGIN [^-]+-----/g, '')
+      .replace(/-----END [^-]+-----/g, '')
+      .replace(/\s+/g, '');
+
+    let derBytes;
+    try {
+      derBytes = Uint8Array.from(atob(b64Body), c => c.charCodeAt(0));
+    } catch {
+      throw new Error('EXNESS_PEM_DECODE_FAILED: Invalid base64 inside PEM');
+    }
+
+    // PKCS#8 Ed25519 private key DER:
+    // SEQUENCE { INTEGER version, SEQUENCE algorithm, OCTET STRING privateKey }
+    // The OCTET STRING (tag 0x04) contains a nested OCTET STRING (tag 0x04)
+    // whose value is the 32-byte seed.
+    // Simplified extraction: take the last 32 bytes (works for standard PKCS#8).
+    if (derBytes.length >= 32) {
+      return derBytes.slice(-32);
+    }
+    throw new Error('EXNESS_PEM_TOO_SHORT: DER length ' + derBytes.length);
+  }
+
+  // 2. Try base64url (with or without padding)
   try {
-    const b64 = secretKey.replace(/-/g, '+').replace(/_/g, '/');
+    const b64 = key.replace(/-/g, '+').replace(/_/g, '/');
     const padded = b64 + '='.repeat((4 - b64.length % 4) % 4);
     const bytes = Uint8Array.from(atob(padded), c => c.charCodeAt(0));
     if (bytes.length === 32) return bytes;
-  } catch (e) {
+  } catch {
     // fall through
   }
 
-  // Try hex (64 hex chars = 32 bytes)
-  try {
-    const hex = secretKey.replace(/[^0-9a-fA-F]/g, '');
-    if (hex.length === 64) {
-      const bytes = new Uint8Array(32);
-      for (let i = 0; i < 32; i++) {
-        bytes[i] = parseInt(hex.substr(i * 2, 2), 16);
-      }
-      return bytes;
+  // 3. Try hex (64 hex chars = 32 bytes)
+  const hex = key.replace(/[^0-9a-fA-F]/g, '');
+  if (hex.length === 64) {
+    const bytes = new Uint8Array(32);
+    for (let i = 0; i < 32; i++) {
+      bytes[i] = parseInt(hex.substr(i * 2, 2), 16);
     }
-  } catch (e) {
-    // fall through
+    return bytes;
   }
 
-  // Last resort: raw string bytes
-  const raw = new TextEncoder().encode(secretKey);
+  // 4. Raw string (unlikely, but check)
+  const raw = new TextEncoder().encode(key);
   if (raw.length === 32) return raw;
 
   throw new Error(
     'EXNESS_SECRET_KEY_DECODE_FAILED: Could not decode Secret Key as a 32-byte ' +
-    'Ed25519 seed. Got length ' + raw.length + '. Check the key format in your ' +
-    'Exness Personal Area.'
+    'Ed25519 seed. Got length ' + raw.length + '. ' +
+    'Your key appears to be in an unsupported format. ' +
+    'Check your Exness Personal Area API page for the key format.'
   );
 }
 
 /**
  * Generate a non-empty idempotency key for mutating requests.
- * Must be unique per request.
  */
 function generateIdempotencyKey() {
   const bytes = new Uint8Array(16);
@@ -155,16 +176,10 @@ function base64urlEncode(bytes) {
 
 /**
  * Wrapper: fetch with Exness signed headers.
- * @param {string} url     - Full URL
- * @param {string} method  - HTTP method
- * @param {Object|null} bodyObj - Body object (will be JSON.stringify'd), or null
- * @param {Object} env     - Cloudflare env
  */
 export async function exnessFetch(url, method, bodyObj, env) {
   const urlObj = new URL(url);
-  // Sign the path AND query string exactly as sent
   const pathWithQuery = urlObj.pathname + urlObj.search;
-
   const bodyStr = bodyObj ? JSON.stringify(bodyObj) : null;
 
   const authHeaders = await buildExnessAuthHeaders(
