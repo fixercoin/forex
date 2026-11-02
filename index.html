@@ -147,7 +147,6 @@
   .cta-bar a:hover { color:#2563eb; }
   .cta-bar .arrow { font-size:16px; }
 
-  /* Native dialog styling */
   dialog::backdrop { background:rgba(0,0,0,.6); }
 </style>
 </head>
@@ -191,7 +190,7 @@
   </a>
 </div>
 
-<!-- Trade execution dialog -->
+<!-- Trade execution dialog: password first, then accounts, then execute -->
 <dialog id="tradeDialog" style="
   background:#181b22; color:#e6e8ec; border:1px solid #222633;
   border-radius:12px; padding:20px; max-width:420px; width:90%;
@@ -201,33 +200,48 @@
 
   <div id="dialogSignalInfo" style="font-size:13px; color:#8a93a6; margin-bottom:16px;"></div>
 
-  <label style="display:block; font-size:12px; color:#8a93a6; margin-bottom:4px;">ACCOUNT</label>
-  <select id="dialogAccountSelect" style="
-    width:100%; padding:8px; background:#12151c; color:#e6e8ec;
-    border:1px solid #222633; border-radius:6px; font-size:14px; margin-bottom:12px;
-  "></select>
-
-  <div id="dialogAccountDetail" style="
-    background:#12151c; border:1px solid #222633; border-radius:8px;
-    padding:10px; font-size:12px; color:#8a93a6; margin-bottom:16px;
-  ">Loading account details...</div>
-
-  <label style="display:block; font-size:12px; color:#8a93a6; margin-bottom:4px;">ADMIN PASSWORD</label>
-  <input id="dialogPassword" type="password" placeholder="Enter admin password" style="
-    width:100%; padding:8px; background:#12151c; color:#e6e8ec;
-    border:1px solid #222633; border-radius:6px; font-size:14px; margin-bottom:16px;
-    box-sizing:border-box;
-  ">
-
-  <div style="display:flex; gap:8px;">
-    <button id="dialogCancel" style="
-      flex:1; padding:10px; background:#222633; color:#e6e8ec;
-      border:0; border-radius:6px; cursor:pointer; font-size:13px;
-    ">CANCEL</button>
-    <button id="dialogExecute" style="
-      flex:1; padding:10px; background:#2563eb; color:#fff;
+  <!-- STEP 1: Password -->
+  <div id="stepPassword">
+    <label style="display:block; font-size:12px; color:#8a93a6; margin-bottom:4px;">ADMIN PASSWORD</label>
+    <input id="dialogPassword" type="password" placeholder="Enter admin password" style="
+      width:100%; padding:8px; background:#12151c; color:#e6e8ec;
+      border:1px solid #222633; border-radius:6px; font-size:14px; margin-bottom:12px;
+      box-sizing:border-box;
+    ">
+    <div id="passwordError" style="color:#ef4444; font-size:12px; margin-bottom:8px; display:none;"></div>
+    <button id="verifyPasswordBtn" style="
+      width:100%; padding:10px; background:#2563eb; color:#fff;
       border:0; border-radius:6px; cursor:pointer; font-size:13px; font-weight:600;
-    ">EXECUTE</button>
+    ">VERIFY PASSWORD</button>
+    <button id="dialogCancelPassword" style="
+      width:100%; padding:10px; background:#222633; color:#e6e8ec;
+      border:0; border-radius:6px; cursor:pointer; font-size:13px; margin-top:8px;
+    ">CANCEL</button>
+  </div>
+
+  <!-- STEP 2: Accounts + Execute (hidden until password verified) -->
+  <div id="stepAccounts" style="display:none;">
+    <label style="display:block; font-size:12px; color:#8a93a6; margin-bottom:4px;">ACCOUNT</label>
+    <select id="dialogAccountSelect" style="
+      width:100%; padding:8px; background:#12151c; color:#e6e8ec;
+      border:1px solid #222633; border-radius:6px; font-size:14px; margin-bottom:12px;
+    "></select>
+
+    <div id="dialogAccountDetail" style="
+      background:#12151c; border:1px solid #222633; border-radius:8px;
+      padding:10px; font-size:12px; color:#8a93a6; margin-bottom:16px;
+    ">Loading account details...</div>
+
+    <div style="display:flex; gap:8px;">
+      <button id="dialogCancel" style="
+        flex:1; padding:10px; background:#222633; color:#e6e8ec;
+        border:0; border-radius:6px; cursor:pointer; font-size:13px;
+      ">CANCEL</button>
+      <button id="dialogExecute" style="
+        flex:1; padding:10px; background:#22c55e; color:#fff;
+        border:0; border-radius:6px; cursor:pointer; font-size:13px; font-weight:600;
+      ">EXECUTE</button>
+    </div>
   </div>
 </dialog>
 
@@ -422,18 +436,24 @@ function renderCard(pair, data) {
 }
 
 /* ------------------------------------------------------------------
-   TRADE DIALOG
+   TRADE DIALOG — password first, then accounts, then execute
 ------------------------------------------------------------------ */
 const tradeDialog = document.getElementById('tradeDialog');
 const dialogSignalInfo = document.getElementById('dialogSignalInfo');
+const stepPassword = document.getElementById('stepPassword');
+const stepAccounts = document.getElementById('stepAccounts');
+const dialogPassword = document.getElementById('dialogPassword');
+const passwordError = document.getElementById('passwordError');
+const verifyPasswordBtn = document.getElementById('verifyPasswordBtn');
 const dialogAccountSelect = document.getElementById('dialogAccountSelect');
 const dialogAccountDetail = document.getElementById('dialogAccountDetail');
-const dialogPassword = document.getElementById('dialogPassword');
 const dialogCancel = document.getElementById('dialogCancel');
+const dialogCancelPassword = document.getElementById('dialogCancelPassword');
 const dialogExecute = document.getElementById('dialogExecute');
 
 let pendingTrade = null;
 let loadedAccounts = [];
+let sessionToken = null;
 
 cardsEl.addEventListener("click", async (e) => {
   const signalEl = e.target.closest('[data-action="trade"]');
@@ -455,6 +475,7 @@ cardsEl.addEventListener("click", async (e) => {
   }
 
   pendingTrade = { signal, pairLabel, entry, tp, sl, symbol };
+  sessionToken = null;
 
   dialogSignalInfo.innerHTML = `
     <strong style="color:#e6e8ec;">${signal} ${pairLabel}</strong><br>
@@ -462,26 +483,74 @@ cardsEl.addEventListener("click", async (e) => {
   `;
 
   dialogPassword.value = '';
-  dialogAccountDetail.textContent = 'Loading account details...';
-  dialogAccountSelect.innerHTML = '<option value="">Loading...</option>';
+  passwordError.style.display = 'none';
+  stepPassword.style.display = 'block';
+  stepAccounts.style.display = 'none';
 
-  await loadAccountsForDialog();
   tradeDialog.showModal();
 });
 
-async function loadAccountsForDialog() {
+verifyPasswordBtn.addEventListener('click', async () => {
+  const pw = dialogPassword.value;
+  if (!pw) {
+    passwordError.textContent = 'Password required.';
+    passwordError.style.display = 'block';
+    return;
+  }
+
+  verifyPasswordBtn.disabled = true;
+  verifyPasswordBtn.textContent = 'VERIFYING...';
+
   try {
-    const res = await fetch('/api/exness/accounts');
+    const res = await fetch('/api/exness/auth', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ adminPassword: pw }),
+    });
     const data = await res.json();
 
     if (!res.ok) {
-      dialogAccountSelect.innerHTML = '<option value="">— Load failed —</option>';
-      dialogAccountDetail.textContent = 'Error: ' + (data.error || 'Unknown error');
+      passwordError.textContent = data.error === 'ADMIN_PASSWORD_INVALID'
+        ? 'Incorrect password.'
+        : (data.error || 'Verification failed.');
+      passwordError.style.display = 'block';
       return;
     }
 
-    // Expected: { accounts: [{ id, balance, equity, margin, freeMargin, currency, leverage }] }
-    // Adjust field names based on actual Exness API response
+    sessionToken = data.token;
+    stepPassword.style.display = 'none';
+    stepAccounts.style.display = 'block';
+    await loadAccountsForDialog();
+
+  } catch (err) {
+    passwordError.textContent = 'Network error: ' + err.message;
+    passwordError.style.display = 'block';
+  } finally {
+    verifyPasswordBtn.disabled = false;
+    verifyPasswordBtn.textContent = 'VERIFY PASSWORD';
+  }
+});
+
+async function loadAccountsForDialog() {
+  dialogAccountDetail.textContent = 'Loading account details...';
+  dialogAccountSelect.innerHTML = '<option value="">Loading...</option>';
+
+  try {
+    const res = await fetch('/api/exness/accounts?sessionToken=' + encodeURIComponent(sessionToken));
+    const data = await res.json();
+
+    if (!res.ok) {
+      if (data.error === 'SESSION_INVALID_OR_EXPIRED') {
+        dialogAccountDetail.textContent = 'Session expired. Please re-enter password.';
+        stepPassword.style.display = 'block';
+        stepAccounts.style.display = 'none';
+      } else {
+        dialogAccountSelect.innerHTML = '<option value="">— Load failed —</option>';
+        dialogAccountDetail.textContent = 'Error: ' + (data.error || 'Unknown error');
+      }
+      return;
+    }
+
     const accounts = data.accounts || data || [];
     loadedAccounts = accounts;
 
@@ -535,20 +604,14 @@ function renderAccountDetail(acc) {
   `;
 }
 
-dialogCancel.addEventListener('click', () => {
-  tradeDialog.close();
-  pendingTrade = null;
-});
-
 dialogExecute.addEventListener('click', async () => {
-  const password = dialogPassword.value;
   const accountId = dialogAccountSelect.value;
 
-  if (!password) { alert('Admin password required.'); return; }
   if (!accountId) { alert('No account selected.'); return; }
   if (!pendingTrade) { tradeDialog.close(); return; }
+  if (!sessionToken) { alert('Session expired. Please re-enter password.'); return; }
 
-  const { signal, symbol, entry, tp, sl } = pendingTrade;
+  const { signal, symbol, tp, sl } = pendingTrade;
 
   dialogExecute.disabled = true;
   dialogExecute.textContent = 'EXECUTING...';
@@ -559,23 +622,23 @@ dialogExecute.addEventListener('click', async () => {
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({
         symbol,
-        type: signal.toLowerCase(), // "buy" or "sell" per Exness API [citation:4][citation:15]
+        type: signal.toLowerCase(),
         quantity: FIXED_LOT_SIZE,
         leverage: 100,
         accountId,
         ...(tp != null && { takeProfit: tp }),
         ...(sl != null && { stopLoss: sl }),
-        adminPassword: password,
+        sessionToken,
       }),
     });
 
     const data = await res.json();
 
     if (!res.ok) {
-      if (data.error && data.error.includes('ADMIN_PASSWORD_INVALID')) {
-        alert('Incorrect admin password.');
-      } else if (data.error && data.error.includes('AUTH_NOT_IMPLEMENTED')) {
-        alert('Backend authentication not configured yet.');
+      if (data.error === 'SESSION_INVALID_OR_EXPIRED') {
+        alert('Session expired. Please re-enter password.');
+        stepPassword.style.display = 'block';
+        stepAccounts.style.display = 'none';
       } else {
         alert('Trade error: ' + (data.error || data.message || 'Unknown error'));
       }
@@ -585,6 +648,7 @@ dialogExecute.addEventListener('click', async () => {
     alert('Order submitted: ' + (data.orderId || data.message || 'OK'));
     tradeDialog.close();
     pendingTrade = null;
+    sessionToken = null;
     refreshPL();
 
   } catch (err) {
@@ -595,8 +659,20 @@ dialogExecute.addEventListener('click', async () => {
   }
 });
 
+dialogCancel.addEventListener('click', () => {
+  tradeDialog.close();
+  pendingTrade = null;
+  sessionToken = null;
+});
+
+dialogCancelPassword.addEventListener('click', () => {
+  tradeDialog.close();
+  pendingTrade = null;
+  sessionToken = null;
+});
+
 /* ------------------------------------------------------------------
-   P/L BADGE
+   P/L BADGE & POSITION MANAGEMENT
 ------------------------------------------------------------------ */
 plBadge.addEventListener("click", async () => {
   try {
@@ -617,8 +693,6 @@ plBadge.addEventListener("click", async () => {
     if (!positions.length) { alert('No open positions.'); return; }
 
     const p = positions[0];
-    // Per Exness order docs, fields include openPrice, currentPrice, takeProfit, stopLoss [citation:9]
-    // P/L field name: search results do not explicitly confirm "profit"; adjust as needed
     const pl = p.profit != null ? Number(p.profit).toFixed(2) : '—';
     const action = prompt(
       `Open position:\n` +
