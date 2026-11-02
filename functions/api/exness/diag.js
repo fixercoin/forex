@@ -16,7 +16,7 @@ export async function onRequestGet(context) {
         side: 'buy',
         volume: '0.01',
       } },
-    { method: 'POST', path: '/api/exness/execute', body: {
+    { method: 'POST', path: '/api/exness/trade', body: {
         accountId: '16000620992',
         instrument: 'EURUSD',
         side: 'buy',
