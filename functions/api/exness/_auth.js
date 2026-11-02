@@ -1,78 +1,67 @@
 // functions/api/exness/_auth.js
 // Shared authentication helper for Exness API.
-// Exness API requires signed requests using API Key + Secret Key [citation:1].
-// The exact signing algorithm is NOT in public search results — fill in the TODO.
+//
+// ⚠️ CRITICAL: Exness official API uses JWT (Authorization: Bearer <token>)[citation:2][citation:6].
+// The search results do NOT contain the JWT generation logic (how to obtain a token
+// from API Key + Secret Key). An unofficial SDK suggests Ed25519 signing[citation:5][citation:16],
+// but the exact algorithm is not documented in the search results.
+//
+// You MUST replace the TODO below with the authentication flow from your
+// Exness Developer Portal documentation.
 
 /**
- * Build signed headers for an Exness API request.
+ * Build the Authorization header for Exness API requests.
  *
- * Known facts from search results:
- * - Exness uses Ed25519-style signing (unofficial SDK evidence) [citation:5][citation:16]
- * - Timestamp tolerance: server_now_ms - signed_timestamp_ms must be 0-3000ms [citation:5]
- * - API Key + Secret Key are used for authentication [citation:1]
- *
- * @param {string} apiKey       - Exness API Key (from env)
- * @param {string} secretKey    - Exness Secret Key (from env)
- * @param {string} method       - HTTP method (GET/POST)
- * @param {string} path         - API path, e.g. "/api/v1/trade/create"
- * @param {string|null} body    - JSON string body or null for GET
- * @returns {Promise<Object>}   - Headers object to merge into fetch()
+ * @param {string} apiKey    - Exness API Key (from Cloudflare Secrets)
+ * @param {string} secretKey - Exness Secret Key (from Cloudflare Secrets)
+ * @returns {Promise<Object>} - Headers object including Authorization
  */
-export async function buildExnessHeaders(apiKey, secretKey, method, path, body = null) {
+export async function buildExnessAuthHeaders(apiKey, secretKey) {
   // ============================================================
-  // TODO: REPLACE THIS ENTIRE SECTION WITH REAL EXNESS SIGNING
+  // TODO: REPLACE THIS ENTIRE SECTION WITH REAL EXNESS AUTH
   // ============================================================
   //
-  // The search results do not provide the exact signature construction.
-  // Based on the unofficial SDK hints [citation:5][citation:16], the flow likely is:
+  // Option A: JWT flow (per official API docs[citation:2][citation:6])
+  //   1. Call the Exness authentication endpoint with apiKey + secretKey
+  //   2. Receive a JWT token
+  //   3. Return { 'Authorization': `Bearer ${token}` }
   //
-  // 1. Get current timestamp in milliseconds
-  //    const timestamp = Date.now().toString();
+  // Option B: Ed25519 signed flow (per unofficial SDK[citation:5])
+  //   The SDK mentions:
+  //   - Headers: EXN-API-KEY, EXN-TIMESTAMP, EXN-SIGN
+  //   - Timestamp tolerance: 0 <= server_now_ms - signed_timestamp_ms <= 3000
+  //   - Private key is Ed25519 seed
+  //   - You need to sign the request payload
   //
-  // 2. Build the message to sign. Common patterns include:
-  //    - `${timestamp}${method}${path}${body || ''}`
-  //    - `${method}${path}${timestamp}${body || ''}`
-  //    - JSON with sorted keys
-  //    Check your Exness API documentation for the exact format.
-  //
-  // 3. Decode the Secret Key. It may be:
-  //    - Base64-encoded Ed25519 private key seed
-  //    - Hex-encoded
-  //    - Raw string
-  //    Check your Exness documentation.
-  //
-  // 4. Sign with Ed25519 using Web Crypto:
-  //    const encoder = new TextEncoder();
-  //    const privateKeyBytes = /* decode secretKey */;
-  //    const cryptoKey = await crypto.subtle.importKey(
-  //      'raw', privateKeyBytes, { name: 'Ed25519' }, false, ['sign']
-  //    );
-  //    const signatureBuffer = await crypto.subtle.sign(
-  //      'Ed25519', cryptoKey, encoder.encode(message)
-  //    );
-  //    const signature = btoa(String.fromCharCode(...new Uint8Array(signatureBuffer)));
-  //
-  // 5. Return headers. Common header names (verify with your docs):
-  //    return {
-  //      'X-API-KEY': apiKey,
-  //      'X-SIGNATURE': signature,
-  //      'X-TIMESTAMP': timestamp,
-  //      'Content-Type': 'application/json',
-  //    };
+  // Example Ed25519 approach (pseudo-code, NOT verified):
+  //   const timestamp = Date.now().toString();
+  //   const message = `${timestamp}${method}${path}${body || ''}`;
+  //   const privateKeyBytes = /* decode secretKey */;
+  //   const cryptoKey = await crypto.subtle.importKey(
+  //     'raw', privateKeyBytes, { name: 'Ed25519' }, false, ['sign']
+  //   );
+  //   const signature = await crypto.subtle.sign(
+  //     'Ed25519', cryptoKey, new TextEncoder().encode(message)
+  //   );
+  //   return {
+  //     'EXN-API-KEY': apiKey,
+  //     'EXN-TIMESTAMP': timestamp,
+  //     'EXN-SIGN': btoa(String.fromCharCode(...new Uint8Array(signature))),
+  //   };
   //
   // ============================================================
 
   throw new Error(
-    'EXNESS_SIGNING_NOT_IMPLEMENTED: ' +
-    'Replace buildExnessHeaders() in _auth.js with the signing logic ' +
-    'from your Exness API documentation. Search results confirm API Key/Secret Key ' +
-    'are used [citation:1] and Ed25519 is likely involved [citation:5], ' +
-    'but the exact algorithm is not documented in public search results.'
+    'EXNESS_AUTH_NOT_IMPLEMENTED: ' +
+    'Replace buildExnessAuthHeaders() with the authentication flow from your ' +
+    'Exness Developer Portal documentation. Official API uses JWT[citation:2], ' +
+    'but the token generation method is not in search results.'
   );
 }
 
 /**
- * Wrapper: fetch with Exness signed headers.
+ * Wrapper: fetch with Exness authentication.
+ * Reads credentials from env (Cloudflare Secrets).
  */
 export async function exnessFetch(url, method, body, env) {
   const apiKey = env.EXNESS_API_KEY;
@@ -82,11 +71,7 @@ export async function exnessFetch(url, method, body, env) {
     throw new Error('EXNESS_CREDENTIALS_MISSING: Set EXNESS_API_KEY and EXNESS_SECRET_KEY in Cloudflare Secrets.');
   }
 
-  const urlObj = new URL(url);
-  const path = urlObj.pathname;
-  const bodyStr = body ? JSON.stringify(body) : null;
-
-  const authHeaders = await buildExnessHeaders(apiKey, secretKey, method, path, bodyStr);
+  const authHeaders = await buildExnessAuthHeaders(apiKey, secretKey);
 
   const headers = {
     ...authHeaders,
@@ -94,7 +79,7 @@ export async function exnessFetch(url, method, body, env) {
   };
 
   const options = { method, headers };
-  if (bodyStr) options.body = bodyStr;
+  if (body) options.body = JSON.stringify(body);
 
   return fetch(url, options);
 }
