@@ -1,13 +1,12 @@
 // functions/api/exness/positions.js
 // GET /api/exness/positions
-// Returns open orders with current P/L.
-// Endpoint: GET /api/v1/trade/open [citation:4]
+// Returns open orders. No admin password required for read-only access.
+// Endpoint: GET /api/v1/trade/open [citation:3][citation:26]
 
 import { exnessFetch } from './_auth.js';
 
 export async function onRequestGet(context) {
   const { env } = context;
-
   const corsHeaders = {
     'Access-Control-Allow-Origin': '*',
     'Content-Type': 'application/json',
