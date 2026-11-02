@@ -1,12 +1,13 @@
 // functions/api/exness/diag.js
-// Probes every /api/exness/* route and returns a consolidated report.
+// Probes every /api/exness/* route EXCEPT itself to avoid 1019 recursion.
+// Also reports whether trade.js is loadable.
 
 export async function onRequestGet(context) {
   const { request, env } = context;
   const origin = new URL(request.url).origin;
 
+  // ⚠️ Do NOT include /api/exness/diag here — that causes 1019 recursion.
   const routes = [
-    { method: 'GET', path: '/api/exness/diag' },
     { method: 'GET', path: '/api/exness/positions' },
     { method: 'GET', path: '/api/exness/accounts' },
     { method: 'POST', path: '/api/exness/trade', body: {
@@ -15,7 +16,7 @@ export async function onRequestGet(context) {
         side: 'buy',
         volume: '0.01',
       } },
-    { method: 'POST', path: '/api/exness/trade', body: {
+    { method: 'POST', path: '/api/exness/execute', body: {
         accountId: '16000620992',
         instrument: 'EURUSD',
         side: 'buy',
@@ -41,8 +42,13 @@ export async function onRequestGet(context) {
       result.contentType = res.headers.get('content-type');
       result.bodyPreview = text.slice(0, 400);
 
-      // Try to parse as JSON for cleaner output
+      // Parse JSON if possible
       try { result.json = JSON.parse(text); } catch { /* not JSON */ }
+
+      // Flag the HTML fallback explicitly
+      if (result.contentType && result.contentType.includes('text/html')) {
+        result.note = 'HTML fallback — route not matched to a Function';
+      }
     } catch (err) {
       result.error = err.message;
     }
@@ -66,6 +72,7 @@ export async function onRequestGet(context) {
     timestamp: new Date().toISOString(),
     env: envSnapshot,
     routes: results,
+    hint: 'If /api/exness/trade returns 404 or text/html, the trade.js Function is not loading. Check its file location and export name.',
   }, null, 2), {
     headers: {
       'Content-Type': 'application/json',
