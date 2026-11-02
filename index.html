@@ -36,7 +36,6 @@
   .icon-btn.spinning svg { animation:spin 1s linear infinite; }
   @keyframes spin { to { transform:rotate(360deg); } }
 
-  /* P/L badge next to header — new, minimal, does not alter layout */
   .pl-badge {
     font-size:12px;
     color:#8a93a6;
@@ -208,7 +207,6 @@ const FIXED_LOT_SIZE = 0.01;
 const SL_ATR_MULT = 1.5;
 const TP_ATR_MULT = 3.0;
 
-/* Exness symbol mapping (adjust to match your Exness account symbols) */
 const EXNESS_SYMBOL_MAP = {
   'EUR/GBP': 'EURGBP',
   'EUR/CHF': 'EURCHF',
@@ -278,7 +276,7 @@ function adx(candles, period = 14) {
 }
 
 /* ------------------------------------------------------------------
-   FETCH (Twelve Data — unchanged)
+   FETCH (Twelve Data)
 ------------------------------------------------------------------ */
 async function fetchSeries(pair) {
   const url = `https://api.twelvedata.com/time_series?symbol=${encodeURIComponent(pair.symbol)}&interval=15min&outputsize=200&apikey=${TWELVE_DATA_KEY}`;
@@ -366,7 +364,6 @@ function renderCard(pair, data) {
          <div class="row"><span>LOT SIZE</span><span class="lot-val">${data.lotSize.toFixed(2)}</span></div>
        </div>`;
 
-  // Store the evaluated data on the card element for later use by execute buttons
   cardsEl.insertAdjacentHTML("beforeend", `
     <div class="card" data-pair="${pair.label}" data-signal="${data.signal}" data-entry="${data.entry}" data-tp="${data.tp ?? ''}" data-sl="${data.sl ?? ''}">
       <div class="pair">${pair.label}</div>
@@ -382,10 +379,9 @@ function renderCard(pair, data) {
 }
 
 /* ------------------------------------------------------------------
-   EXNESS FRONTEND CALLS (backend proxy handles signing)
+   EXNESS: ADMIN-PROTECTED TRADE EXECUTION
 ------------------------------------------------------------------ */
 
-// Click on the signal block triggers confirmation and order placement
 cardsEl.addEventListener("click", async (e) => {
   const signalEl = e.target.closest('[data-action="trade"]');
   if (!signalEl) return;
@@ -405,15 +401,17 @@ cardsEl.addEventListener("click", async (e) => {
     return;
   }
 
-  const ok = confirm(
-    `Place ${signal} order?\n\n` +
+  // Admin password prompt
+  const password = prompt(
+    `Admin authorization required to execute ${signal}.\n\n` +
     `Pair: ${pairLabel}\n` +
     `Entry: ${entry.toFixed(4)}\n` +
     `TP: ${tp ? tp.toFixed(4) : '—'}\n` +
-    `SL: ${sl ? sl.toFixed(4) : '—'}\n` +
-    `Lot: ${FIXED_LOT_SIZE}`
+    `SL: ${sl ? sl.toFixed(4) : '—'}\n\n` +
+    `Enter admin password:`
   );
-  if (!ok) return;
+
+  if (!password) return;
 
   try {
     const res = await fetch('/api/exness/trade', {
@@ -423,18 +421,20 @@ cardsEl.addEventListener("click", async (e) => {
         symbol,
         type: signal.toLowerCase(),
         quantity: FIXED_LOT_SIZE,
-        leverage: 100, // adjust to your Exness account leverage
+        leverage: 100,
         ...(tp != null && { takeProfit: tp }),
         ...(sl != null && { stopLoss: sl }),
+        adminPassword: password,
       }),
     });
 
     const data = await res.json();
 
     if (!res.ok) {
-      // Backend not yet implemented (signing TODO) — show friendly message
-      if (data.error && data.error.includes('signing')) {
-        alert('Backend signing not configured yet. Please complete the Exness API signing logic in your Worker.');
+      if (data.error && data.error.includes('AUTH_NOT_IMPLEMENTED')) {
+        alert('Backend authentication not configured yet. Complete the Exness auth logic in _auth.js.');
+      } else if (data.error && data.error.includes('ADMIN_PASSWORD_INVALID')) {
+        alert('Incorrect admin password.');
       } else {
         alert('Trade error: ' + (data.error || data.message || 'Unknown error'));
       }
@@ -448,15 +448,18 @@ cardsEl.addEventListener("click", async (e) => {
   }
 });
 
-// P/L badge click — fetch positions and show dialog for close/modify
+/* ------------------------------------------------------------------
+   P/L BADGE & POSITION MANAGEMENT
+------------------------------------------------------------------ */
+
 plBadge.addEventListener("click", async () => {
   try {
     const res = await fetch('/api/exness/positions');
     const data = await res.json();
 
     if (!res.ok) {
-      if (data.error && data.error.includes('signing')) {
-        alert('Backend signing not configured yet. Please complete the Exness API signing logic in your Worker.');
+      if (data.error && data.error.includes('AUTH_NOT_IMPLEMENTED')) {
+        alert('Backend authentication not configured yet. Complete the Exness auth logic in _auth.js.');
       } else {
         alert('Position fetch error: ' + (data.error || data.message || 'Unknown error'));
       }
@@ -470,28 +473,31 @@ plBadge.addEventListener("click", async () => {
       return;
     }
 
-    // Simple dialog: show first position, offer actions
     const p = positions[0];
+    // Field names per unofficial docs[citation:3]: openPrice, currentPrice
+    // P/L field name is not confirmed in search results; adjust as needed
     const pl = p.profit != null ? Number(p.profit).toFixed(2) : '—';
     const action = prompt(
       `Open position:\n` +
       `Symbol: ${p.symbol}\n` +
       `Type: ${p.type}\n` +
+      `Open: ${p.openPrice ?? '—'}\n` +
+      `Current: ${p.currentPrice ?? '—'}\n` +
       `P/L: ${pl}\n\n` +
-      `Enter: "close" to close, "sl" to modify SL, "tp" to modify TP`,
+      `Enter: "close" to close this position`,
       ''
     );
 
     if (!action) return;
 
     if (action.toLowerCase() === 'close') {
-      const confirmClose = confirm(`Close position ${p.orderId}?`);
-      if (!confirmClose) return;
+      const pw = prompt('Enter admin password to close position:');
+      if (!pw) return;
 
       const closeRes = await fetch('/api/exness/close', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ orderId: p.orderId }),
+        body: JSON.stringify({ orderId: p.orderId, adminPassword: pw }),
       });
       const closeData = await closeRes.json();
       if (!closeRes.ok) {
@@ -500,26 +506,12 @@ plBadge.addEventListener("click", async () => {
         alert('Position closed.');
         refreshPL();
       }
-    } else if (action.toLowerCase() === 'sl' || action.toLowerCase() === 'tp') {
-      const newPrice = prompt(`Enter new ${action.toUpperCase()} price:`);
-      if (!newPrice) return;
-
-      // Backend modify endpoint is not implemented in the earlier Worker skeleton.
-      // This alert tells the user what would be sent.
-      alert(
-        `Modify request would be sent:\n` +
-        `orderId: ${p.orderId}\n` +
-        `field: ${action === 'sl' ? 'stopLoss' : 'takeProfit'}\n` +
-        `value: ${newPrice}\n\n` +
-        `Note: /api/exness/modify endpoint is not yet implemented in the Worker.`
-      );
     }
   } catch (err) {
     alert('P/L fetch error: ' + err.message);
   }
 });
 
-// Refresh P/L badge
 async function refreshPL() {
   try {
     const res = await fetch('/api/exness/positions');
@@ -530,6 +522,7 @@ async function refreshPL() {
       return;
     }
     const positions = Array.isArray(data) ? data : (data.positions || data.orders || []);
+    // P/L field name uncertain; using 'profit' as fallback
     const total = positions.reduce((sum, p) => sum + (Number(p.profit) || 0), 0);
     plBadge.textContent = 'P/L ' + (total >= 0 ? '+' : '') + total.toFixed(2);
     plBadge.className = 'pl-badge ' + (total >= 0 ? 'profit' : 'loss');
@@ -540,7 +533,7 @@ async function refreshPL() {
 }
 
 /* ------------------------------------------------------------------
-   MAIN
+   MAIN REFRESH
 ------------------------------------------------------------------ */
 async function refresh() {
   cardsEl.innerHTML = "";
@@ -586,7 +579,6 @@ async function refresh() {
   refreshBtn.disabled = false;
   refreshBtn.classList.remove("spinning");
 
-  // Also refresh P/L on manual refresh
   refreshPL();
 }
 refreshBtn.addEventListener("click", refresh);
