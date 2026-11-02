@@ -1,7 +1,7 @@
 // functions/api/exness/positions.js
 // GET /api/exness/positions
-// Correct flow: discover Access Point, then fetch positions from that host.
-// Every error path returns JSON — never HTML.
+// Flow: Gateway discovery -> Access Point -> positions.
+// ⚠️ ENDPOINT PATH NOT CONFIRMED — verify in your Exness OpenAPI spec.
 
 import { exnessFetch } from './_auth.js';
 
@@ -15,7 +15,7 @@ export async function onRequestGet(context) {
   };
 
   try {
-    // 1. Gateway host for discovery
+    // 1. Gateway host
     const gateway = (env.EXNESS_GATEWAY_HOST || 'https://api.exness.com').replace(/\/+$/, '');
 
     // 2. Discover Access Point
@@ -33,9 +33,9 @@ export async function onRequestGet(context) {
 
     const apBase = apData.access_point.replace(/\/+$/, '');
 
-    // 3. Fetch positions from Access Point.
-    // ⚠️ ENDPOINT PATH NOT CONFIRMED — verify in your Exness OpenAPI spec.
-    // Possible paths to try: /v1/trading/positions, /v1/positions,
+    // 3. Fetch positions from Access Point
+    // ⚠️ Replace this path with the correct one from your OpenAPI spec.
+    // Candidates: /v1/trading/positions, /v1/positions,
     // /v1/accounts/{id}/positions
     const positionsPath = `/v1/trading/positions?account_id=${EXNESS_ACCOUNT_ID}`;
     const posRes = await exnessFetch(`${apBase}${positionsPath}`, 'GET', null, env);
