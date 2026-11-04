@@ -3,7 +3,7 @@
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0"/>
-<title>FIXORIUM AI SIGNAL</title>
+<title>FIXORIUM AI SIGNAL v2</title>
 <style>
   body { margin:0; font-family:system-ui,sans-serif; background:#0f1115; color:#e6e8ec; padding:24px; padding-bottom:80px; }
   .header-row { display:flex; align-items:center; justify-content:space-between; gap:12px; margin-bottom:12px; }
@@ -42,12 +42,13 @@
   .cta-bar a:hover { color:#2563eb; }
   .cta-bar .arrow { font-size:16px; }
   dialog::backdrop { background:rgba(0,0,0,.6); }
+  .filter-note { font-size:11px; color:#ef4444; margin-top:4px; }
 </style>
 </head>
 <body>
 
 <div class="header-row">
-  <h1>FIXORIUM AI SIGNAL</h1>
+  <h1>FIXORIUM AI SIGNAL v2</h1>
   <button id="refresh" class="icon-btn" title="Refresh signals" aria-label="Refresh signals">
     <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
       <line x1="20" y1="8" x2="5" y2="8"></line>
@@ -60,7 +61,7 @@
 
 <div class="marquee-bar">
   <div class="marquee-track">
-    VOLATILITY-FILTERED PAIRS · EMA TREND · RSI MOMENTUM · ADX STRENGTH &nbsp;&nbsp;|&nbsp;&nbsp;
+    PULLBACK ENTRIES · EMA50 TREND FILTER · ADX&gt;20 REGIME FILTER · RSI CONFIRMATION · ATR STOP &nbsp;&nbsp;|&nbsp;&nbsp;
     <strong>NOT FINANCIAL ADVICE. SIGNALS ARE DECISION-SUPPORT ONLY.</strong>
     &nbsp;&nbsp;&nbsp;&nbsp;
   </div>
@@ -103,25 +104,182 @@ const PAIRS = [
   { label: "USD/CHF", symbol: "USD/CHF" },
 ];
 const SHOW_COUNT = 3;
-const FIXED_LOT_SIZE = 0.01;
-const SL_ATR_MULT = 1.5;
-const TP_ATR_MULT = 3.0;
+
+// --- TIMEFRAME ---
+// "15min" was too noisy. 1h gives cleaner trend structure.
+const INTERVAL = "1h";
+const OUTPUTSIZE = 300;
+
+// --- RISK MODEL ---
+// Fixed % risk per trade, not fixed lot. This keeps risk constant
+// regardless of stop-loss distance.
+const ACCOUNT_BALANCE_USD = 1000;   // <-- set your real account balance
+const RISK_PERCENT = 1.0;           // 1% of balance per trade
+const FIXED_LOT_SIZE = 0.01;        // fallback only if risk calc fails
+
+// --- STOP / TARGET ---
+// Widened from 1.5x to 2.5x ATR so normal noise does not hit the stop.
+const SL_ATR_MULT = 2.5;
+const TP_ATR_MULT = 5.0;            // 2.0 R:R minimum
+
+// --- FILTERS ---
+const ADX_MIN = 20;                 // below this = choppy, no trade
+const MIN_REWARD_RISK = 1.5;        // reject setups below this R:R
+const PULLBACK_TOL_ATR = 0.5;       // entry zone = EMA20 +/- 0.5 ATR
+
 const EXNESS_SYMBOL_MAP = { 'EUR/GBP': 'EURGBP', 'EUR/CHF': 'EURCHF', 'GBP/CHF': 'GBPCHF', 'AUD/NZD': 'AUDNZD', 'USD/CHF': 'USDCHF' };
 const EXNESS_ACCOUNT_ID = '16000620992';
 
 /* ------------------------------------------------------------------
    INDICATORS
 ------------------------------------------------------------------ */
-function ema(values, period) { const k = 2 / (period + 1); let prev = values.slice(0, period).reduce((a,b)=>a+b,0) / period; for (let i = period; i < values.length; i++) prev = values[i]*k + prev*(1-k); return prev; }
-function rsi(closes, period = 14) { let g=0,l=0; for (let i=1;i<=period;i++){const d=closes[i]-closes[i-1]; d>=0?g+=d:l-=d;} let ag=g/period, al=l/period; for (let i=period+1;i<closes.length;i++){const d=closes[i]-closes[i-1]; ag=(ag*(period-1)+(d>0?d:0))/period; al=(al*(period-1)+(d<0?-d:0))/period;} const rs = al===0?100:ag/al; return 100 - 100/(1+rs); }
-function atr(candles, period = 14) { const trs=[]; for (let i=1;i<candles.length;i++){trs.push(Math.max(candles[i].high-candles[i].low, Math.abs(candles[i].high-candles[i-1].close), Math.abs(candles[i].low-candles[i-1].close)));} return trs.slice(-period).reduce((a,b)=>a+b,0)/period; }
-function adx(candles, period = 14) { const pDM=[],mDM=[],trs=[]; for (let i=1;i<candles.length;i++){const up=candles[i].high-candles[i-1].high; const dn=candles[i-1].low-candles[i].low; pDM.push(up>dn&&up>0?up:0); mDM.push(dn>up&&dn>0?dn:0); trs.push(Math.max(candles[i].high-candles[i].low, Math.abs(candles[i].high-candles[i-1].close), Math.abs(candles[i].low-candles[i-1].close)));} let trS=trs.slice(0,period).reduce((a,b)=>a+b,0); let pS=pDM.slice(0,period).reduce((a,b)=>a+b,0); let mS=mDM.slice(0,period).reduce((a,b)=>a+b,0); const dxs=[]; for (let i=period;i<trs.length;i++){trS=trS-trS/period+trs[i]; pS=pS-pS/period+pDM[i]; mS=mS-mS/period+mDM[i]; const pDI=100*pS/trS, mDI=100*mS/trS; dxs.push(100*Math.abs(pDI-mDI)/(pDI+mDI||1));} if (dxs.length<period) return dxs[dxs.length-1]||0; return dxs.slice(-period).reduce((a,b)=>a+b,0)/period; }
+function ema(values, period) {
+  const k = 2 / (period + 1);
+  let prev = values.slice(0, period).reduce((a,b)=>a+b,0) / period;
+  for (let i = period; i < values.length; i++) prev = values[i]*k + prev*(1-k);
+  return prev;
+}
+function rsi(closes, period = 14) {
+  let g=0,l=0;
+  for (let i=1;i<=period;i++){const d=closes[i]-closes[i-1]; d>=0?g+=d:l-=d;}
+  let ag=g/period, al=l/period;
+  for (let i=period+1;i<closes.length;i++){const d=closes[i]-closes[i-1]; ag=(ag*(period-1)+(d>0?d:0))/period; al=(al*(period-1)+(d<0?-d:0))/period;}
+  const rs = al===0?100:ag/al;
+  return 100 - 100/(1+rs);
+}
+function atr(candles, period = 14) {
+  const trs=[];
+  for (let i=1;i<candles.length;i++){
+    trs.push(Math.max(candles[i].high-candles[i].low, Math.abs(candles[i].high-candles[i-1].close), Math.abs(candles[i].low-candles[i-1].close)));
+  }
+  return trs.slice(-period).reduce((a,b)=>a+b,0)/period;
+}
+function adx(candles, period = 14) {
+  const pDM=[],mDM=[],trs=[];
+  for (let i=1;i<candles.length;i++){
+    const up=candles[i].high-candles[i-1].high;
+    const dn=candles[i-1].low-candles[i].low;
+    pDM.push(up>dn&&up>0?up:0);
+    mDM.push(dn>up&&dn>0?dn:0);
+    trs.push(Math.max(candles[i].high-candles[i].low, Math.abs(candles[i].high-candles[i-1].close), Math.abs(candles[i].low-candles[i-1].close)));
+  }
+  let trS=trs.slice(0,period).reduce((a,b)=>a+b,0);
+  let pS=pDM.slice(0,period).reduce((a,b)=>a+b,0);
+  let mS=mDM.slice(0,period).reduce((a,b)=>a+b,0);
+  const dxs=[];
+  for (let i=period;i<trs.length;i++){
+    trS=trS-trS/period+trs[i];
+    pS=pS-pS/period+pDM[i];
+    mS=mS-mS/period+mDM[i];
+    const pDI=100*pS/trS, mDI=100*mS/trS;
+    dxs.push(100*Math.abs(pDI-mDI)/(pDI+mDI||1));
+  }
+  if (dxs.length<period) return dxs[dxs.length-1]||0;
+  return dxs.slice(-period).reduce((a,b)=>a+b,0)/period;
+}
 
 /* ------------------------------------------------------------------
-   FETCH & EVALUATE
+   FETCH
 ------------------------------------------------------------------ */
-async function fetchSeries(pair) { const url = `https://api.twelvedata.com/time_series?symbol=${encodeURIComponent(pair.symbol)}&interval=15min&outputsize=200&apikey=${TWELVE_DATA_KEY}`; const res = await fetch(url); const json = await res.json(); if (json.status === "error") throw new Error(json.message || "API error"); if (!json.values || !json.values.length) throw new Error("Empty values array"); const rows = json.values.slice().reverse(); return { candles: rows.map(r => ({ high: parseFloat(r.high), low: parseFloat(r.low), close: parseFloat(r.close) })) }; }
-function evaluate(candles) { const closes = candles.map(c=>c.close); const price = closes[closes.length-1]; const eFast = ema(closes, 20); const eSlow = ema(closes, 50); const r = rsi(closes, 14); const a = atr(candles, 14); const d = adx(candles, 14); let score = 0; if (price > eFast) score++; if (eFast > eSlow) score++; if (r > 50) score++; if (d > 25) score++; let signal = "NEUTRAL"; if (score >= 3) signal = "BUY"; else if (score <= 1) signal = "SELL"; const slDistance = a * SL_ATR_MULT; const tpDistance = a * TP_ATR_MULT; const entry = price; let tp = null, sl = null; if (signal === "BUY") { tp = price + tpDistance; sl = price - slDistance; } else if (signal === "SELL") { tp = price - tpDistance; sl = price + slDistance; } return { signal, confidence: Math.min(95, Math.round((Math.abs(score)/4)*100)), price, atr: a, atrPct: (a/price)*100, rsi: r, adx: d, emaFast: eFast, emaSlow: eSlow, entry, tp, sl, lotSize: FIXED_LOT_SIZE }; }
+async function fetchSeries(pair) {
+  const url = `https://api.twelvedata.com/time_series?symbol=${encodeURIComponent(pair.symbol)}&interval=${INTERVAL}&outputsize=${OUTPUTSIZE}&apikey=${TWELVE_DATA_KEY}`;
+  const res = await fetch(url);
+  const json = await res.json();
+  if (json.status === "error") throw new Error(json.message || "API error");
+  if (!json.values || !json.values.length) throw new Error("Empty values array");
+  const rows = json.values.slice().reverse();
+  return { candles: rows.map(r => ({ high: parseFloat(r.high), low: parseFloat(r.low), close: parseFloat(r.close), open: parseFloat(r.open) })) };
+}
+
+/* ------------------------------------------------------------------
+   EVALUATE  (v2 logic)
+   - Trend: price on correct side of EMA50
+   - Regime: ADX > ADX_MIN (no choppy trades)
+   - Pullback: price near EMA20 (limit-style entry, no chasing)
+   - Momentum: RSI confirms but does NOT drive the entry
+   - Stop: 2.5x ATR; TP: 5x ATR (2R)
+------------------------------------------------------------------ */
+function evaluate(candles) {
+  const closes = candles.map(c=>c.close);
+  const price = closes[closes.length-1];
+  const eFast = ema(closes, 20);
+  const eSlow = ema(closes, 50);
+  const r = rsi(closes, 14);
+  const a = atr(candles, 14);
+  const d = adx(candles, 14);
+
+  // ---- regime filter ----
+  const regimeOk = d >= ADX_MIN;
+
+  // ---- trend ----
+  const trendUp   = price > eSlow && eFast > eSlow;
+  const trendDown = price < eSlow && eFast < eSlow;
+
+  // ---- pullback zone: price must be near EMA20, not extended ----
+  const distToFast = Math.abs(price - eFast);
+  const inPullbackZone = distToFast <= a * PULLBACK_TOL_ATR;
+
+  // ---- momentum confirmation ----
+  const momentumUp   = r > 50 && r < 70;   // not overbought
+  const momentumDown = r < 50 && r > 30;   // not oversold
+
+  let signal = "NEUTRAL";
+  let rejectReason = "";
+
+  if (!regimeOk) {
+    rejectReason = `ADX ${d.toFixed(1)} < ${ADX_MIN} (choppy)`;
+  } else if (trendUp && inPullbackZone && momentumUp) {
+    signal = "BUY";
+  } else if (trendDown && inPullbackZone && momentumDown) {
+    signal = "SELL";
+  } else if (trendUp || trendDown) {
+    rejectReason = inPullbackZone ? "momentum not aligned" : "price extended (no pullback)";
+  } else {
+    rejectReason = "no clear trend";
+  }
+
+  // ---- levels ----
+  const slDistance = a * SL_ATR_MULT;
+  const tpDistance = a * TP_ATR_MULT;
+  // Entry is the EMA20 pullback level, not the current market price.
+  const entry = (signal === "BUY" || signal === "SELL") ? eFast : price;
+  let tp = null, sl = null;
+  if (signal === "BUY")  { tp = entry + tpDistance; sl = entry - slDistance; }
+  if (signal === "SELL") { tp = entry - tpDistance; sl = entry + slDistance; }
+
+  // ---- reward:risk check ----
+  let rr = null;
+  if (tp != null && sl != null) {
+    rr = Math.abs(tp - entry) / Math.abs(entry - sl);
+    if (rr < MIN_REWARD_RISK) { signal = "NEUTRAL"; rejectReason = `R:R ${rr.toFixed(2)} too low`; tp = sl = entry = null; rr = null; }
+  }
+
+  // ---- position size from % risk ----
+  let lotSize = FIXED_LOT_SIZE;
+  if (signal !== "NEUTRAL" && sl != null) {
+    // For a 0.01 lot on most FX pairs, 1 pip ~= $0.10. We compute SL in pips.
+    // Fallback: risk-based sizing using value-per-price-unit approximation.
+    const slPips = Math.abs(entry - sl) / 0.0001;   // approx for 4-decimal pairs
+    const pipValuePerLot = 10;                       // USD per pip per 1.0 lot
+    const riskUsd = ACCOUNT_BALANCE_USD * (RISK_PERCENT / 100);
+    const rawLots = riskUsd / (slPips * pipValuePerLot);
+    lotSize = Math.max(0.01, Math.round(rawLots * 100) / 100);
+  }
+
+  // ---- honest confidence: count independent confirmations ----
+  let confirmations = 0;
+  if (regimeOk) confirmations++;
+  if (trendUp || trendDown) confirmations++;
+  if (inPullbackZone) confirmations++;
+  if (momentumUp || momentumDown) confirmations++;
+  const confidence = signal === "NEUTRAL" ? 0 : Math.round((confirmations / 4) * 100);
+
+  return {
+    signal, confidence, price, atr: a, atrPct: (a/price)*100,
+    rsi: r, adx: d, emaFast: eFast, emaSlow: eSlow,
+    entry, tp, sl, lotSize, rr, rejectReason,
+  };
+}
 
 /* ------------------------------------------------------------------
    RENDER
@@ -132,8 +290,28 @@ const errorsBox = document.getElementById("errorsBox");
 const refreshBtn = document.getElementById("refresh");
 function fmt(v) { return v === null ? "—" : v.toFixed(4); }
 function renderCard(pair, data) {
-  const levelsBlock = data.signal === "NEUTRAL" ? `<div class="levels"><div class="row"><span>ENTRY / TP / SL</span><span>— NO TRADE —</span></div><div class="row"><span>LOT SIZE</span><span class="lot-val">${data.lotSize.toFixed(2)}</span></div></div>` : `<div class="levels"><div class="row"><span>ENTRY</span><span class="entry-val">${fmt(data.entry)}</span></div><div class="row"><span>TAKE PROFIT</span><span class="tp-val">${fmt(data.tp)}</span></div><div class="row"><span>STOP LOSS</span><span class="sl-val">${fmt(data.sl)}</span></div><div class="row"><span>LOT SIZE</span><span class="lot-val">${data.lotSize.toFixed(2)}</span></div></div>`;
-  cardsEl.insertAdjacentHTML("beforeend", `<div class="card" data-pair="${pair.label}" data-signal="${data.signal}" data-entry="${data.entry}" data-tp="${data.tp ?? ''}" data-sl="${data.sl ?? ''}"><div class="pair">${pair.label}</div><div class="price">${data.price.toFixed(4)}</div><div class="row"><span>ATR (VOL)</span><span>${data.atr.toFixed(4)} (${data.atrPct.toFixed(2)}%)</span></div><div class="row"><span>RSI</span><span>${data.rsi.toFixed(1)}</span></div><div class="row"><span>ADX</span><span>${data.adx.toFixed(1)}</span></div><div class="row"><span>EMA20 / EMA50</span><span>${data.emaFast.toFixed(4)} / ${data.emaSlow.toFixed(4)}</span></div>${levelsBlock}<div class="signal ${data.signal}" style="cursor:${data.signal !== 'NEUTRAL' ? 'pointer' : 'default'};" data-action="trade">${data.signal}</div><div class="conf">CONFIDENCE: ${data.confidence}%</div></div>`);
+  const isTrade = data.signal === "BUY" || data.signal === "SELL";
+  const levelsBlock = !isTrade
+    ? `<div class="levels"><div class="row"><span>ENTRY / TP / SL</span><span>— NO TRADE —</span></div><div class="row"><span>REASON</span><span class="filter-note">${data.rejectReason || "—"}</span></div></div>`
+    : `<div class="levels">
+         <div class="row"><span>ENTRY (EMA20 PULLBACK)</span><span class="entry-val">${fmt(data.entry)}</span></div>
+         <div class="row"><span>TAKE PROFIT</span><span class="tp-val">${fmt(data.tp)}</span></div>
+         <div class="row"><span>STOP LOSS</span><span class="sl-val">${fmt(data.sl)}</span></div>
+         <div class="row"><span>R:R</span><span>${data.rr ? data.rr.toFixed(2) : "—"}</span></div>
+         <div class="row"><span>LOT SIZE</span><span class="lot-val">${data.lotSize.toFixed(2)}</span></div>
+       </div>`;
+  cardsEl.insertAdjacentHTML("beforeend",
+    `<div class="card" data-pair="${pair.label}" data-signal="${data.signal}" data-entry="${data.entry ?? ''}" data-tp="${data.tp ?? ''}" data-sl="${data.sl ?? ''}">
+       <div class="pair">${pair.label}</div>
+       <div class="price">${data.price.toFixed(4)}</div>
+       <div class="row"><span>ATR (VOL)</span><span>${data.atr.toFixed(4)} (${data.atrPct.toFixed(2)}%)</span></div>
+       <div class="row"><span>RSI</span><span>${data.rsi.toFixed(1)}</span></div>
+       <div class="row"><span>ADX</span><span>${data.adx.toFixed(1)}</span></div>
+       <div class="row"><span>EMA20 / EMA50</span><span>${data.emaFast.toFixed(4)} / ${data.emaSlow.toFixed(4)}</span></div>
+       ${levelsBlock}
+       <div class="signal ${data.signal}" style="cursor:${isTrade ? 'pointer' : 'default'};" data-action="trade">${data.signal}</div>
+       <div class="conf">CONFIDENCE: ${data.confidence}%</div>
+     </div>`);
 }
 
 /* ------------------------------------------------------------------
@@ -160,7 +338,7 @@ cardsEl.addEventListener("click", async (e) => {
   const symbol = EXNESS_SYMBOL_MAP[pairLabel];
   if (!symbol) { alert('No Exness symbol mapping for ' + pairLabel); return; }
   pendingTrade = { signal, pairLabel, entry, tp, sl, symbol };
-  dialogSignalInfo.innerHTML = `<strong style="color:#e6e8ec;">${signal} ${pairLabel}</strong><br>Entry: ${entry.toFixed(4)} · TP: ${tp ? tp.toFixed(4) : '—'} · SL: ${sl ? sl.toFixed(4) : '—'}`;
+  dialogSignalInfo.innerHTML = `<strong style="color:#e6e8ec;">${signal} ${pairLabel}</strong><br>Entry (limit @ EMA20): ${entry.toFixed(4)} · TP: ${tp ? tp.toFixed(4) : '—'} · SL: ${sl ? sl.toFixed(4) : '—'}`;
   dialogPassword.value = '';
   dialogError.style.display = 'none';
   tradeDialog.showModal();
@@ -222,15 +400,26 @@ async function refresh() {
   errorsBox.innerHTML = "";
   refreshBtn.disabled = true;
   refreshBtn.classList.add("spinning");
-  if (!TWELVE_DATA_KEY) { statusEl.textContent = "MISSING API KEY"; cardsEl.innerHTML = `<div class="card">PASTE YOUR TWELVE DATA API KEY INTO TWELVE_DATA_KEY AND REDEPLOY.</div>`; refreshBtn.disabled = false; refreshBtn.classList.remove("spinning"); return; }
+  if (!TWELVE_DATA_KEY) {
+    statusEl.textContent = "MISSING API KEY";
+    cardsEl.innerHTML = `<div class="card">PASTE YOUR TWELVE DATA API KEY INTO TWELVE_DATA_KEY AND REDEPLOY.</div>`;
+    refreshBtn.disabled = false;
+    refreshBtn.classList.remove("spinning");
+    return;
+  }
   statusEl.textContent = "LOADING…";
-  const results = await Promise.all(PAIRS.map(async p => { try { const { candles } = await fetchSeries(p); return { pair: p, ok: true, data: evaluate(candles) }; } catch (err) { return { pair: p, ok: false, error: err.message }; } }));
+  const results = await Promise.all(PAIRS.map(async p => {
+    try { const { candles } = await fetchSeries(p); return { pair: p, ok: true, data: evaluate(candles) }; }
+    catch (err) { return { pair: p, ok: false, error: err.message }; }
+  }));
   const valid = results.filter(r => r.ok).map(r => ({ pair: r.pair, ...r.data }));
   valid.sort((a,b) => a.atrPct - b.atrPct);
   valid.slice(0, SHOW_COUNT).forEach(r => renderCard(r.pair, r));
   const failed = results.filter(r => !r.ok);
   if (failed.length) errorsBox.textContent = "SKIPPED: " + failed.map(f => `${f.pair.label} — ${f.error}`).join(" · ");
-  statusEl.textContent = valid.length ? `UPDATED ${new Date().toLocaleTimeString()} · SHOWING ${Math.min(valid.length, SHOW_COUNT)} LOWEST-VOL PAIRS` : `UPDATED ${new Date().toLocaleTimeString()} · NO VALID DATA`;
+  statusEl.textContent = valid.length
+    ? `UPDATED ${new Date().toLocaleTimeString()} · ${INTERVAL} · SHOWING ${Math.min(valid.length, SHOW_COUNT)} LOWEST-VOL PAIRS`
+    : `UPDATED ${new Date().toLocaleTimeString()} · NO VALID DATA`;
   refreshBtn.disabled = false;
   refreshBtn.classList.remove("spinning");
 }
