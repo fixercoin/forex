@@ -45,7 +45,6 @@
   dialog::backdrop { background:rgba(0,0,0,.6); }
   .filter-note { font-size:11px; color:#ef4444; margin-top:4px; }
 
-  /* Dashboard */
   .dash { display:none; }
   .dash.visible { display:block; }
   .balance-card { background:#181b22; border:1px solid #222633; border-radius:12px; padding:16px; margin-bottom:16px; display:flex; flex-wrap:wrap; gap:20px; align-items:center; }
@@ -72,6 +71,17 @@
   .pos-empty { text-align:center; color:#6b7280; padding:20px; font-size:13px; }
   .section-head { display:flex; justify-content:space-between; align-items:center; margin:16px 0 8px; }
   .section-head button { padding:6px 12px; background:#222633; color:#e6e8ec; border:0; border-radius:6px; cursor:pointer; font-size:12px; }
+
+  .chart-toggle { margin:12px 0 0; width:100%; padding:8px; background:#222633; color:#e6e8ec; border:0; border-radius:6px; cursor:pointer; font-size:12px; font-weight:600; letter-spacing:.5px; }
+  .chart-toggle:hover { background:#2d3345; }
+  .chart-wrap { display:none; margin-top:12px; border-radius:8px; overflow:hidden; background:#12151c; border:1px solid #222633; }
+  .chart-wrap.visible { display:block; }
+  .chart-header { display:flex; justify-content:space-between; align-items:center; padding:8px 10px; font-size:11px; color:#8a93a6; border-bottom:1px solid #222633; }
+  .chart-header .legend { display:flex; gap:10px; flex-wrap:wrap; }
+  .chart-header .legend span { display:inline-flex; align-items:center; gap:4px; }
+  .chart-header .dot { width:8px; height:8px; border-radius:50%; display:inline-block; }
+  .chart-canvas { width:100%; height:280px; }
+  .chart-msg { padding:16px; text-align:center; font-size:12px; color:#6b7280; }
 </style>
 </head>
 <body>
@@ -99,13 +109,12 @@
 
 <div class="marquee-bar">
   <div class="marquee-track">
-    PULLBACK ENTRIES · EMA50 TREND FILTER · ADX&gt;20 REGIME FILTER · RSI CONFIRMATION · ATR STOP &nbsp;&nbsp;|&nbsp;&nbsp;
+    30M TIMEFRAME · PULLBACK ENTRIES · EMA50 TREND FILTER · ADX&gt;22 REGIME FILTER · RSI CONFIRMATION · ATR STOP &nbsp;&nbsp;|&nbsp;&nbsp;
     <strong>NOT FINANCIAL ADVICE. SIGNALS ARE DECISION-SUPPORT ONLY.</strong>
     &nbsp;&nbsp;&nbsp;&nbsp;
   </div>
 </div>
 
-<!-- Dashboard (hidden until unlocked) -->
 <div class="dash" id="dash">
   <h2>Account</h2>
   <div class="balance-card">
@@ -138,7 +147,6 @@
   </div>
 </div>
 
-<!-- Signals -->
 <h2 style="margin-top:24px;">Signals</h2>
 <div style="margin-bottom:12px;"><span class="badge" id="status">IDLE</span></div>
 <div class="grid" id="cards"></div>
@@ -150,7 +158,6 @@
   </a>
 </div>
 
-<!-- Unlock dialog -->
 <dialog id="unlockDialog" style="background:#181b22; color:#e6e8ec; border:1px solid #222633; border-radius:12px; padding:20px; max-width:420px; width:90%; font-family:system-ui,sans-serif;">
   <h3 style="margin:0 0 12px; font-size:16px;">UNLOCK ACCOUNT</h3>
   <div style="font-size:13px; color:#8a93a6; margin-bottom:16px;">
@@ -165,7 +172,6 @@
   </div>
 </dialog>
 
-<!-- Trade dialog (open new trade from a signal) -->
 <dialog id="tradeDialog" style="background:#181b22; color:#e6e8ec; border:1px solid #222633; border-radius:12px; padding:20px; max-width:420px; width:90%; font-family:system-ui,sans-serif;">
   <h3 style="margin:0 0 12px; font-size:16px;">EXECUTE TRADE</h3>
   <div id="dialogSignalInfo" style="font-size:13px; color:#8a93a6; margin-bottom:16px;"></div>
@@ -178,23 +184,21 @@
   </div>
 </dialog>
 
-<!-- Modify dialog -->
 <dialog id="modDialog" style="background:#181b22; color:#e6e8ec; border:1px solid #222633; border-radius:12px; padding:20px; max-width:420px; width:90%; font-family:system-ui,sans-serif;">
   <h3 style="margin:0 0 12px; font-size:16px;">MODIFY POSITION</h3>
   <div id="modInfo" style="font-size:13px; color:#8a93a6; margin-bottom:16px;"></div>
-
   <label style="display:block; font-size:12px; color:#8a93a6; margin-bottom:4px;">STOP LOSS (empty = remove)</label>
   <input id="modSL" type="text" inputmode="decimal" placeholder="e.g. 1.08340" style="width:100%; padding:8px; background:#12151c; color:#e6e8ec; border:1px solid #222633; border-radius:6px; font-size:14px; margin-bottom:12px; box-sizing:border-box;">
-
   <label style="display:block; font-size:12px; color:#8a93a6; margin-bottom:4px;">TAKE PROFIT (empty = remove)</label>
   <input id="modTP" type="text" inputmode="decimal" placeholder="e.g. 1.09500" style="width:100%; padding:8px; background:#12151c; color:#e6e8ec; border:1px solid #222633; border-radius:6px; font-size:14px; margin-bottom:12px; box-sizing:border-box;">
-
   <div id="modError" style="color:#ef4444; font-size:12px; margin-bottom:8px; display:none;"></div>
   <div style="display:flex; gap:8px;">
     <button id="modCancel" style="flex:1; padding:10px; background:#222633; color:#e6e8ec; border:0; border-radius:6px; cursor:pointer; font-size:13px;">CANCEL</button>
     <button id="modSubmit" style="flex:1; padding:10px; background:#2563eb; color:#fff; border:0; border-radius:6px; cursor:pointer; font-size:13px; font-weight:600;">SAVE</button>
   </div>
 </dialog>
+
+<script src="https://unpkg.com/lightweight-charts@4.1.3/dist/lightweight-charts.standalone.production.js"></script>
 
 <script>
 /* ==================================================================
@@ -209,21 +213,33 @@ const PAIRS = [
   { label: "USD/CHF", symbol: "USD/CHF" },
 ];
 const SHOW_COUNT = 3;
-const INTERVAL = "1h";
+
+// ---- TIMEFRAME: 30 minutes (signal matches chart) ----
+const INTERVAL = "30min";
+const CHART_INTERVAL = "30min";
+
 const OUTPUTSIZE = 300;
+const CHART_OUTPUTSIZE = 120;
 const ACCOUNT_BALANCE_USD = 1000;
 const RISK_PERCENT = 1.0;
 const FIXED_LOT_SIZE = 0.01;
+
+// ---- 30M TUNING ----
 const SL_ATR_MULT = 2.5;
 const TP_ATR_MULT = 5.0;
-const ADX_MIN = 20;
+const ADX_MIN = 22;              // 30m is noisier -> raise from 20 to 22
 const MIN_REWARD_RISK = 1.5;
-const PULLBACK_TOL_ATR = 0.5;
+const PULLBACK_TOL_ATR = 0.4;    // tighter pullback zone on faster timeframe
+
 const EXNESS_SYMBOL_MAP = { 'EUR/GBP': 'EURGBP', 'EUR/CHF': 'EURCHF', 'GBP/CHF': 'GBPCHF', 'AUD/NZD': 'AUDNZD', 'USD/CHF': 'USDCHF' };
 const EXNESS_ACCOUNT_ID = '16000620992';
 
+const CHART_CACHE_MS = 5 * 60 * 1000;
+const chartCache = new Map();
+
 let ADMIN_PASSWORD = null;
 let balanceTimer = null;
+const openCharts = new Map();
 
 /* ==================================================================
    INDICATORS
@@ -273,8 +289,21 @@ function adx(candles, period = 14) {
   return dxs.slice(-period).reduce((a,b)=>a+b,0)/period;
 }
 
+function emaSeries(values, period) {
+  const out = new Array(values.length).fill(null);
+  if (values.length < period) return out;
+  const k = 2 / (period + 1);
+  let prev = values.slice(0, period).reduce((a,b)=>a+b,0) / period;
+  out[period - 1] = prev;
+  for (let i = period; i < values.length; i++) {
+    prev = values[i]*k + prev*(1-k);
+    out[i] = prev;
+  }
+  return out;
+}
+
 /* ==================================================================
-   FETCH / EVALUATE
+   FETCH SIGNAL DATA (30m)
 ================================================================== */
 async function fetchSeries(pair) {
   const url = `https://api.twelvedata.com/time_series?symbol=${encodeURIComponent(pair.symbol)}&interval=${INTERVAL}&outputsize=${OUTPUTSIZE}&apikey=${TWELVE_DATA_KEY}`;
@@ -283,11 +312,21 @@ async function fetchSeries(pair) {
   if (json.status === "error") throw new Error(json.message || "API error");
   if (!json.values || !json.values.length) throw new Error("Empty values array");
   const rows = json.values.slice().reverse();
-  return { candles: rows.map(r => ({ high: parseFloat(r.high), low: parseFloat(r.low), close: parseFloat(r.close), open: parseFloat(r.open) })) };
+  return { candles: rows.map(r => ({
+    datetime: r.datetime,
+    high: parseFloat(r.high),
+    low: parseFloat(r.low),
+    close: parseFloat(r.close),
+    open: parseFloat(r.open),
+  })) };
 }
+
+/* ==================================================================
+   EVALUATE (30m signal logic)
+================================================================== */
 function evaluate(candles) {
-  const closes = candles.map(c=>c.close);
-  const price = closes[closes.length-1];
+  const closes = candles.map(c => c.close);
+  const price = closes[closes.length - 1];
   const eFast = ema(closes, 20);
   const eSlow = ema(closes, 50);
   const r = rsi(closes, 14);
@@ -295,20 +334,30 @@ function evaluate(candles) {
   const d = adx(candles, 14);
 
   const regimeOk = d >= ADX_MIN;
+
   const trendUp   = price > eSlow && eFast > eSlow;
   const trendDown = price < eSlow && eFast < eSlow;
+
   const distToFast = Math.abs(price - eFast);
   const inPullbackZone = distToFast <= a * PULLBACK_TOL_ATR;
+
   const momentumUp   = r > 50 && r < 70;
   const momentumDown = r < 50 && r > 30;
 
   let signal = "NEUTRAL";
   let rejectReason = "";
-  if (!regimeOk) rejectReason = `ADX ${d.toFixed(1)} < ${ADX_MIN} (choppy)`;
-  else if (trendUp && inPullbackZone && momentumUp) signal = "BUY";
-  else if (trendDown && inPullbackZone && momentumDown) signal = "SELL";
-  else if (trendUp || trendDown) rejectReason = inPullbackZone ? "momentum not aligned" : "price extended (no pullback)";
-  else rejectReason = "no clear trend";
+
+  if (!regimeOk) {
+    rejectReason = `ADX ${d.toFixed(1)} < ${ADX_MIN} (choppy)`;
+  } else if (trendUp && inPullbackZone && momentumUp) {
+    signal = "BUY";
+  } else if (trendDown && inPullbackZone && momentumDown) {
+    signal = "SELL";
+  } else if (trendUp || trendDown) {
+    rejectReason = inPullbackZone ? "momentum not aligned" : "price extended (no pullback)";
+  } else {
+    rejectReason = "no clear trend";
+  }
 
   const slDistance = a * SL_ATR_MULT;
   const tpDistance = a * TP_ATR_MULT;
@@ -320,7 +369,12 @@ function evaluate(candles) {
   let rr = null;
   if (tp != null && sl != null) {
     rr = Math.abs(tp - entry) / Math.abs(entry - sl);
-    if (rr < MIN_REWARD_RISK) { signal = "NEUTRAL"; rejectReason = `R:R ${rr.toFixed(2)} too low`; tp = sl = entry = null; rr = null; }
+    if (rr < MIN_REWARD_RISK) {
+      signal = "NEUTRAL";
+      rejectReason = `R:R ${rr.toFixed(2)} too low`;
+      tp = sl = entry = null;
+      rr = null;
+    }
   }
 
   let lotSize = FIXED_LOT_SIZE;
@@ -339,11 +393,69 @@ function evaluate(candles) {
   if (momentumUp || momentumDown) confirmations++;
   const confidence = signal === "NEUTRAL" ? 0 : Math.round((confirmations / 4) * 100);
 
-  return { signal, confidence, price, atr: a, atrPct: (a/price)*100, rsi: r, adx: d, emaFast: eFast, emaSlow: eSlow, entry, tp, sl, lotSize, rr, rejectReason };
+  return {
+    signal, confidence, price,
+    atr: a, atrPct: (a / price) * 100,
+    rsi: r, adx: d,
+    emaFast: eFast, emaSlow: eSlow,
+    entry, tp, sl, lotSize, rr, rejectReason,
+  };
+}
+
+/* ==================================================================
+   FETCH 30m CHART DATA
+================================================================== */
+async function fetchChartSeries(pair) {
+  const cached = chartCache.get(pair.label);
+  if (cached && (Date.now() - cached.ts) < CHART_CACHE_MS) return cached.candles;
+
+  const url = `https://api.twelvedata.com/time_series?symbol=${encodeURIComponent(pair.symbol)}&interval=${CHART_INTERVAL}&outputsize=${CHART_OUTPUTSIZE}&apikey=${TWELVE_DATA_KEY}`;
+  const res = await fetch(url);
+  const json = await res.json();
+  if (json.status === "error") throw new Error(json.message || "Chart API error");
+  if (!json.values || !json.values.length) throw new Error("Empty chart data");
+
+  const rows = json.values.slice().reverse();
+  const candles = rows.map(r => ({
+    time: Math.floor(new Date(r.datetime.replace(' ', 'T') + 'Z').getTime() / 1000),
+    open: parseFloat(r.open),
+    high: parseFloat(r.high),
+    low: parseFloat(r.low),
+    close: parseFloat(r.close),
+  })).filter(c => Number.isFinite(c.time) && Number.isFinite(c.close));
+
+  chartCache.set(pair.label, { ts: Date.now(), candles });
+  return candles;
+}
+
+/* ==================================================================
+   SUPPORT / RESISTANCE
+================================================================== */
+function computeSR(candles, lookback = 50) {
+  if (!candles.length) return { supports: [], resistances: [] };
+  const slice = candles.slice(-lookback);
+  const highs = slice.map(c => c.high).sort((a,b)=>b-a);
+  const lows  = slice.map(c => c.low).sort((a,b)=>a-b);
+  const lastPrice = candles[candles.length-1].close;
+
+  const resistances = [];
+  for (const h of highs) {
+    if (h <= lastPrice) continue;
+    if (!resistances.some(x => Math.abs(x - h) / h < 0.0008)) resistances.push(h);
+    if (resistances.length === 2) break;
+  }
+  const supports = [];
+  for (const l of lows) {
+    if (l >= lastPrice) continue;
+    if (!supports.some(x => Math.abs(x - l) / l < 0.0008)) supports.push(l);
+    if (supports.length === 2) break;
+  }
+  return { supports, resistances };
 }
 
 /* ==================================================================
    RENDER SIGNAL CARDS
+   Order: pair -> price -> indicators -> levels -> CHART -> signal -> confidence
 ================================================================== */
 const cardsEl = document.getElementById("cards");
 const statusEl = document.getElementById("status");
@@ -361,6 +473,7 @@ function renderCard(pair, data) {
          <div class="row"><span>R:R</span><span>${data.rr ? data.rr.toFixed(2) : "—"}</span></div>
          <div class="row"><span>LOT SIZE</span><span class="lot-val">${data.lotSize.toFixed(2)}</span></div>
        </div>`;
+
   cardsEl.insertAdjacentHTML("beforeend",
     `<div class="card" data-pair="${pair.label}" data-signal="${data.signal}" data-entry="${data.entry ?? ''}" data-tp="${data.tp ?? ''}" data-sl="${data.sl ?? ''}">
        <div class="pair">${pair.label}</div>
@@ -370,9 +483,119 @@ function renderCard(pair, data) {
        <div class="row"><span>ADX</span><span>${data.adx.toFixed(1)}</span></div>
        <div class="row"><span>EMA20 / EMA50</span><span>${data.emaFast.toFixed(4)} / ${data.emaSlow.toFixed(4)}</span></div>
        ${levelsBlock}
+       <button class="chart-toggle" data-action="chart" data-pair="${pair.label}">SHOW 30M CHART</button>
+       <div class="chart-wrap" id="chart-wrap-${pair.label.replace('/','_')}">
+         <div class="chart-header">
+           <span>${pair.label} · 30M</span>
+           <span class="legend">
+             <span><span class="dot" style="background:#ef4444;"></span>Resistance</span>
+             <span><span class="dot" style="background:#22c55e;"></span>Support</span>
+             <span><span class="dot" style="background:#60a5fa;"></span>EMA20</span>
+             <span><span class="dot" style="background:#f59e0b;"></span>EMA50</span>
+           </span>
+         </div>
+         <div class="chart-canvas" id="chart-canvas-${pair.label.replace('/','_')}"></div>
+         <div class="chart-msg" id="chart-msg-${pair.label.replace('/','_')}" style="display:none;"></div>
+       </div>
        <div class="signal ${data.signal}" style="cursor:${isTrade ? 'pointer' : 'default'};" data-action="trade">${data.signal}</div>
        <div class="conf">CONFIDENCE: ${data.confidence}%</div>
      </div>`);
+}
+
+/* ==================================================================
+   CHART RENDERING
+================================================================== */
+function chartKey(pairLabel) { return pairLabel.replace('/','_'); }
+
+async function toggleChart(pairLabel, btn) {
+  const wrap = document.getElementById(`chart-wrap-${chartKey(pairLabel)}`);
+  if (!wrap) return;
+
+  if (wrap.classList.contains('visible')) {
+    wrap.classList.remove('visible');
+    btn.textContent = 'SHOW 30M CHART';
+    return;
+  }
+
+  wrap.classList.add('visible');
+  btn.textContent = 'HIDE CHART';
+
+  if (openCharts.has(pairLabel)) {
+    const { chart } = openCharts.get(pairLabel);
+    chart.timeScale().fitContent();
+    return;
+  }
+
+  const canvas = document.getElementById(`chart-canvas-${chartKey(pairLabel)}`);
+  const msg = document.getElementById(`chart-msg-${chartKey(pairLabel)}`);
+  canvas.innerHTML = '';
+  msg.style.display = 'block';
+  msg.textContent = 'Loading 30m candles…';
+
+  try {
+    const pair = PAIRS.find(p => p.label === pairLabel);
+    if (!pair) throw new Error('Unknown pair');
+    const candles = await fetchChartSeries(pair);
+    if (candles.length < 20) throw new Error('Not enough candles');
+
+    const { supports, resistances } = computeSR(candles, 50);
+    const closes = candles.map(c => c.close);
+    const ema20 = emaSeries(closes, 20);
+    const ema50 = emaSeries(closes, 50);
+
+    const chart = LightweightCharts.createChart(canvas, {
+      width: canvas.clientWidth,
+      height: 280,
+      layout: { background: { color: '#12151c' }, textColor: '#8a93a6', fontSize: 10 },
+      grid: { vertLines: { color: '#1a1e28' }, horzLines: { color: '#1a1e28' } },
+      rightPriceScale: { borderColor: '#222633' },
+      timeScale: { borderColor: '#222633', timeVisible: true, secondsVisible: false },
+      crosshair: { mode: LightweightCharts.CrosshairMode.Normal },
+    });
+
+    const candleSeries = chart.addCandlestickSeries({
+      upColor: '#22c55e', downColor: '#ef4444',
+      wickUpColor: '#22c55e', wickDownColor: '#ef4444',
+      borderVisible: false,
+    });
+    candleSeries.setData(candles);
+
+    const ema20Series = chart.addLineSeries({ color: '#60a5fa', lineWidth: 1, priceLineVisible: false, lastValueVisible: false });
+    const ema50Series = chart.addLineSeries({ color: '#f59e0b', lineWidth: 1, priceLineVisible: false, lastValueVisible: false });
+    const ema20Data = [], ema50Data = [];
+    for (let i = 0; i < candles.length; i++) {
+      if (ema20[i] != null) ema20Data.push({ time: candles[i].time, value: ema20[i] });
+      if (ema50[i] != null) ema50Data.push({ time: candles[i].time, value: ema50[i] });
+    }
+    ema20Series.setData(ema20Data);
+    ema50Series.setData(ema50Data);
+
+    for (const r of resistances) {
+      candleSeries.createPriceLine({
+        price: r, color: '#ef4444', lineWidth: 1, lineStyle: LightweightCharts.LineStyle.Dashed,
+        axisLabelVisible: true, title: 'R',
+      });
+    }
+    for (const s of supports) {
+      candleSeries.createPriceLine({
+        price: s, color: '#22c55e', lineWidth: 1, lineStyle: LightweightCharts.LineStyle.Dashed,
+        axisLabelVisible: true, title: 'S',
+      });
+    }
+
+    chart.timeScale().fitContent();
+    msg.style.display = 'none';
+
+    const ro = new ResizeObserver(() => {
+      chart.applyOptions({ width: canvas.clientWidth });
+    });
+    ro.observe(canvas);
+
+    openCharts.set(pairLabel, { chart, series: candleSeries, ro });
+  } catch (err) {
+    msg.style.display = 'block';
+    msg.textContent = 'Chart failed: ' + err.message;
+  }
 }
 
 /* ==================================================================
@@ -387,6 +610,13 @@ const dialogExecute = document.getElementById('dialogExecute');
 let pendingTrade = null;
 
 cardsEl.addEventListener("click", async (e) => {
+  const chartBtn = e.target.closest('[data-action="chart"]');
+  if (chartBtn) {
+    e.preventDefault();
+    toggleChart(chartBtn.dataset.pair, chartBtn);
+    return;
+  }
+
   const signalEl = e.target.closest('[data-action="trade"]');
   if (!signalEl) return;
   const card = signalEl.closest('.card');
@@ -637,7 +867,6 @@ async function loadPositions() {
   }
 }
 
-/* Position actions */
 posBody.addEventListener('click', async (e) => {
   const btn = e.target.closest('button[data-act]');
   if (!btn) return;
@@ -733,13 +962,17 @@ modSubmit.addEventListener('click', async () => {
 });
 
 /* ==================================================================
-   MAIN REFRESH (signals)
+   MAIN REFRESH
 ================================================================== */
 async function refresh() {
   cardsEl.innerHTML = "";
   errorsBox.innerHTML = "";
   refreshBtn.disabled = true;
   refreshBtn.classList.add("spinning");
+
+  openCharts.forEach(({ chart, ro }) => { try { ro.disconnect(); chart.remove(); } catch(e){} });
+  openCharts.clear();
+
   if (!TWELVE_DATA_KEY) {
     statusEl.textContent = "MISSING API KEY";
     cardsEl.innerHTML = `<div class="card">PASTE YOUR TWELVE DATA API KEY INTO TWELVE_DATA_KEY AND REDEPLOY.</div>`;
