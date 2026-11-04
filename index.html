@@ -73,7 +73,7 @@
 
 <div class="marquee-bar">
   <div class="marquee-track">
-    30M · S/R BOUNCE + REJECTION + BREAKOUT + PULLBACK · EMA50 TREND · ADX&gt;18 · RSI CONFIRMATION &nbsp;&nbsp;|&nbsp;&nbsp;
+    30M · WICK-BASED S/R REJECTION + BOUNCE + BREAKOUT · ADX&gt;15 · NO TREND REQUIREMENT FOR S/R &nbsp;&nbsp;|&nbsp;&nbsp;
     <strong>NOT FINANCIAL ADVICE. SIGNALS ARE DECISION-SUPPORT ONLY.</strong>
     &nbsp;&nbsp;&nbsp;&nbsp;
   </div>
@@ -130,20 +130,14 @@ const INTERVAL = "30min";
 const CHART_INTERVAL = "30min";
 const OUTPUTSIZE = 300;
 const CHART_OUTPUTSIZE = 120;
-const ACCOUNT_BALANCE_USD = 1000;
-const RISK_PERCENT = 1.0;
 const FIXED_LOT_SIZE = 0.01;
 
-// ---- RELAXED thresholds ----
-const SL_ATR_MULT = 2.0;          // slightly tighter SL
-const TP_ATR_MULT = 4.0;          // 2R
-const ADX_MIN = 18;               // was 22 -> 18 (more pairs pass)
-const MIN_REWARD_RISK = 1.5;
-const PULLBACK_TOL_ATR = 0.6;     // wider pullback zone
-
-// ---- S/R trigger parameters (relaxed) ----
-const SR_TOUCH_ATR = 0.8;         // price within 0.8 ATR of level = touch
-const SR_BREAKOUT_ATR = 0.5;      // breakout within 0.5 ATR
+// ---- VERY RELAXED thresholds ----
+const SL_ATR_MULT = 2.0;
+const TP_ATR_MULT = 4.0;
+const ADX_MIN = 15;                 // was 18 -> 15
+const MIN_REWARD_RISK = 1.2;        // was 1.5 -> 1.2
+const SR_TOUCH_ATR = 1.2;           // was 0.8 -> 1.2 (very permissive)
 
 const EXNESS_SYMBOL_MAP = {
   'EUR/GBP': 'EURGBP', 'EUR/CHF': 'EURCHF', 'GBP/CHF': 'GBPCHF',
@@ -221,14 +215,14 @@ function emaSeries(values, period) {
 }
 
 /* ==================================================================
-   S/R DETECTION — pivot-based, returns levels BOTH sides of price
+   S/R DETECTION — returns ALL levels (both sides of price)
 ================================================================== */
 function computeSR(candles, lookback = 60) {
   if (candles.length < 10) return { supports: [], resistances: [], all: [] };
   const slice = candles.slice(-lookback);
   const lastPrice = candles[candles.length - 1].close;
 
-  // Find swing highs and swing lows (3-bar pivots)
+  // 3-bar swing pivots
   const swingHighs = [];
   const swingLows = [];
   for (let i = 2; i < slice.length - 2; i++) {
@@ -243,13 +237,12 @@ function computeSR(candles, lookback = 60) {
     }
   }
 
-  // Cluster nearby pivots (within 0.15% of each other)
   function cluster(arr) {
     const sorted = arr.slice().sort((a,b) => a-b);
     const out = [];
     for (const v of sorted) {
       const last = out[out.length - 1];
-      if (last && Math.abs(v - last.price) / last.price < 0.0015) {
+      if (last && Math.abs(v - last.price) / last.price < 0.002) {
         last.price = (last.price * last.count + v) / (last.count + 1);
         last.count++;
       } else {
@@ -262,28 +255,16 @@ function computeSR(candles, lookback = 60) {
   const highClusters = cluster(swingHighs);
   const lowClusters  = cluster(swingLows);
 
-  // Resistances = any level above price (regardless of which side it formed)
-  // Supports = any level below price
-  const resistances = highClusters
+  // ALL levels — no filtering by side
+  const all = [...highClusters, ...lowClusters]
     .map(c => c.price)
-    .filter(p => p > lastPrice)
-    .sort((a,b) => a-b)
-    .slice(0, 3);
+    .sort((a,b) => b - a);
 
-  const supports = lowClusters
-    .map(c => c.price)
-    .filter(p => p < lastPrice)
-    .sort((a,b) => b-a)
-    .slice(0, 3);
+  // For display: resistances above price, supports below
+  const resistances = all.filter(p => p > lastPrice).sort((a,b) => a - b).slice(0, 3);
+  const supports    = all.filter(p => p < lastPrice).sort((a,b) => b - a).slice(0, 3);
 
-  // Also include "touched" levels — levels price is currently AT,
-  // regardless of whether it's slightly above or below
-  const allLevels = [...highClusters, ...lowClusters]
-    .map(c => c.price)
-    .sort((a,b) => Math.abs(a - lastPrice) - Math.abs(b - lastPrice))
-    .slice(0, 4);
-
-  return { supports, resistances, all: allLevels };
+  return { supports, resistances, all };
 }
 
 /* ==================================================================
@@ -306,16 +287,11 @@ async function fetchSeries(pair) {
 }
 
 /* ==================================================================
-   EVALUATE — S/R is a FIRST-CLASS trigger
-   Priority:
-     1) S/R BOUNCE / REJECTION  (works on its own, trend optional)
-     2) BREAKOUT                (works on its own, trend optional)
-     3) EMA20 PULLBACK          (needs trend + momentum)
+   EVALUATE — wick-based, permissive, no trend requirement for S/R
 ================================================================== */
 function evaluate(candles) {
   const closes = candles.map(c => c.close);
   const price = closes[closes.length - 1];
-  const prevPrice = closes[closes.length - 2];
   const eFast = ema(closes, 20);
   const eSlow = ema(closes, 50);
   const r = rsi(closes, 14);
@@ -328,34 +304,46 @@ function evaluate(candles) {
   const trendUp   = price > eSlow && eFast > eSlow;
   const trendDown = price < eSlow && eFast < eSlow;
 
-  // --- S/R proximity ---
-  const nearSupport    = supports.some(s => Math.abs(price - s) <= a * SR_TOUCH_ATR);
-  const nearResistance = resistances.some(rr => Math.abs(price - rr) <= a * SR_TOUCH_ATR);
-  const nearAnyLevel   = all.some(lv => Math.abs(price - lv) <= a * SR_TOUCH_ATR);
-
-  // --- Breakouts: price crossed a level between prev and current close ---
-  const brokeResistanceUp = resistances.some(rr => prevPrice <= rr && price > rr && (price - rr) <= a * SR_BREAKOUT_ATR);
-  const brokeSupportDown  = supports.some(s => prevPrice >= s && price < s && (s - price) <= a * SR_BREAKOUT_ATR);
-
-  // --- Bounce detection: price pierced support and closed back above it ---
   const lastCandle = candles[candles.length - 1];
-  const prevCandle = candles[candles.length - 2];
-  const bouncedOffSupport = supports.some(s =>
-    lastCandle.low <= s && lastCandle.close > s && prevCandle.close > s
-  );
-  const rejectedAtResistance = resistances.some(rr =>
-    lastCandle.high >= rr && lastCandle.close < rr && prevCandle.close < rr
-  );
+  const lastOpen = lastCandle.open;
+  const lastHigh = lastCandle.high;
+  const lastLow = lastCandle.low;
+  const lastClose = lastCandle.close;
+  const bullCandle = lastClose > lastOpen;
+  const bearCandle = lastClose < lastOpen;
 
-  // --- EMA pullback ---
+  // ---- WICK-BASED rejection / bounce (permissive) ----
+  // Rejection at resistance: high reached a resistance, close came back below
+  const rejectedAtResistance = all.some(lv => {
+    if (lastHigh < lv) return false;                       // never reached
+    if (Math.abs(lastHigh - lv) > a * SR_TOUCH_ATR) return false; // too far
+    return bearCandle || lastClose < lv;                   // bearish or closed below
+  });
+
+  // Bounce at support: low touched a support, close came back above
+  const bouncedOffSupport = all.some(lv => {
+    if (lastLow > lv) return false;                        // never reached
+    if (Math.abs(lastLow - lv) > a * SR_TOUCH_ATR) return false;  // too far
+    return bullCandle || lastClose > lv;                   // bullish or closed above
+  });
+
+  // ---- Simple proximity (fallback) ----
+  const nearLevel = all.some(lv => Math.abs(price - lv) <= a * SR_TOUCH_ATR);
+
+  // ---- Breakout: close crossed a level between prev close and now ----
+  const prevClose = closes[closes.length - 2];
+  const brokeUp = all.some(lv => prevClose < lv && lastClose > lv);
+  const brokeDown = all.some(lv => prevClose > lv && lastClose < lv);
+
+  // ---- EMA pullback ----
   const distToFast = Math.abs(price - eFast);
-  const nearEMA20 = distToFast <= a * PULLBACK_TOL_ATR;
+  const nearEMA20 = distToFast <= a * 0.6;
 
-  // --- Momentum: RELAXED — just not actively against the trade ---
-  const momentumOkForBuy  = r < 75;   // not overbought
-  const momentumOkForSell = r > 25;   // not oversold
+  // ---- Momentum: just not extreme ----
+  const notOverbought = r < 78;
+  const notOversold   = r > 22;
 
-  // --- Trigger hierarchy ---
+  // ---- Trigger decision ----
   let signal = "NEUTRAL";
   let rejectReason = "";
   let triggerLabel = "";
@@ -363,60 +351,55 @@ function evaluate(candles) {
   if (!regimeOk) {
     rejectReason = `ADX ${d.toFixed(1)} < ${ADX_MIN}`;
   } else {
-    // Priority 1: S/R bounce / rejection (strongest, most reliable)
-    if (bouncedOffSupport && momentumOkForBuy) {
-      signal = "BUY";
-      triggerLabel = "bounce off support";
-    } else if (rejectedAtResistance && momentumOkForSell) {
+    // Priority 1: Wick rejection at resistance -> SELL
+    if (rejectedAtResistance && notOverbought) {
       signal = "SELL";
       triggerLabel = "rejection at resistance";
     }
-    // Priority 2: Breakout
-    else if (brokeResistanceUp && momentumOkForBuy && (trendUp || r > 50)) {
+    // Priority 2: Wick bounce off support -> BUY
+    else if (bouncedOffSupport && notOversold) {
+      signal = "BUY";
+      triggerLabel = "bounce off support";
+    }
+    // Priority 3: Breakout
+    else if (brokeUp && notOverbought) {
       signal = "BUY";
       triggerLabel = "resistance breakout";
     }
-    else if (brokeSupportDown && momentumOkForSell && (trendDown || r < 50)) {
+    else if (brokeDown && notOversold) {
       signal = "SELL";
       triggerLabel = "support breakdown";
     }
-    // Priority 3: Near S/R with trend (weaker — but allowed)
-    else if (nearSupport && trendUp && momentumOkForBuy) {
+    // Priority 4: Near a level + candle direction agrees
+    else if (nearLevel && bullCandle && notOverbought) {
       signal = "BUY";
-      triggerLabel = "at support + uptrend";
+      triggerLabel = "near level, bullish candle";
     }
-    else if (nearResistance && trendDown && momentumOkForSell) {
+    else if (nearLevel && bearCandle && notOversold) {
       signal = "SELL";
-      triggerLabel = "at resistance + downtrend";
+      triggerLabel = "near level, bearish candle";
     }
-    // Priority 4: EMA20 pullback
-    else if (nearEMA20 && trendUp && momentumOkForBuy) {
+    // Priority 5: EMA20 pullback with trend
+    else if (nearEMA20 && trendUp && notOverbought) {
       signal = "BUY";
       triggerLabel = "EMA20 pullback";
     }
-    else if (nearEMA20 && trendDown && momentumOkForSell) {
+    else if (nearEMA20 && trendDown && notOversold) {
       signal = "SELL";
       triggerLabel = "EMA20 pullback";
     }
     else {
-      // Explain what's missing
-      const reasons = [];
-      if (nearSupport) reasons.push("at support (need uptrend)");
-      else if (nearResistance) reasons.push("at resistance (need downtrend)");
-      else if (nearEMA20) reasons.push("at EMA20 (need trend)");
-      else reasons.push("no S/R or EMA20 touch");
-      if (!trendUp && !trendDown) reasons.push("no trend");
-      if (r >= 75) reasons.push("overbought");
-      if (r <= 25) reasons.push("oversold");
-      rejectReason = reasons.join(", ");
+      const parts = [];
+      if (!nearLevel) parts.push("no level nearby");
+      if (!nearEMA20) parts.push("no EMA20 touch");
+      if (!bullCandle && !bearCandle) parts.push("no candle direction");
+      rejectReason = parts.join(", ") || "no trigger";
     }
   }
 
-  // --- Levels ---
+  // ---- Levels ----
   const slDistance = a * SL_ATR_MULT;
   const tpDistance = a * TP_ATR_MULT;
-  // Entry = current price (not EMA20) for S/R trades, because the S/R
-  // level is where the action is, not EMA20.
   const entry = price;
   let tp = null, sl = null;
   if (signal === "BUY")  { tp = entry + tpDistance; sl = entry - slDistance; }
@@ -435,12 +418,11 @@ function evaluate(candles) {
 
   const lotSize = FIXED_LOT_SIZE;
 
-  // --- Confidence ---
   let confirmations = 0;
   if (regimeOk) confirmations++;
   if (trendUp || trendDown) confirmations++;
-  if (nearSupport || nearResistance || nearEMA20 || bouncedOffSupport || rejectedAtResistance || brokeResistanceUp || brokeSupportDown) confirmations++;
-  if (r > 25 && r < 75) confirmations++;
+  if (nearLevel || nearEMA20) confirmations++;
+  if ((notOverbought && signal === "BUY") || (notOversold && signal === "SELL")) confirmations++;
   if (signal !== "NEUTRAL") confirmations++;
   const confidence = signal === "NEUTRAL" ? 0 : Math.round((confirmations / 5) * 100);
 
@@ -451,7 +433,6 @@ function evaluate(candles) {
     emaFast: eFast, emaSlow: eSlow,
     entry, tp, sl, lotSize, rr, rejectReason,
     triggerLabel,
-    nearSupport, nearResistance,
     supports, resistances,
   };
 }
@@ -599,9 +580,9 @@ async function toggleChart(pairLabel, btn) {
     ema20Series.setData(ema20Data);
     ema50Series.setData(ema50Data);
 
-    for (const r of resistances) {
+    for (const rr of resistances) {
       candleSeries.createPriceLine({
-        price: r, color: '#ef4444', lineWidth: 1, lineStyle: LightweightCharts.LineStyle.Dashed,
+        price: rr, color: '#ef4444', lineWidth: 1, lineStyle: LightweightCharts.LineStyle.Dashed,
         axisLabelVisible: true, title: 'R',
       });
     }
@@ -737,7 +718,6 @@ async function refresh() {
     catch (err) { return { pair: p, ok: false, error: err.message }; }
   }));
   const valid = results.filter(r => r.ok).map(r => ({ pair: r.pair, ...r.data }));
-  // BUY/SELL first, then by ATR%
   valid.sort((a, b) => {
     const aT = a.signal === "NEUTRAL" ? 1 : 0;
     const bT = b.signal === "NEUTRAL" ? 1 : 0;
