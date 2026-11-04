@@ -109,14 +109,27 @@
    CONFIG
 ================================================================== */
 const TWELVE_DATA_KEY = "1d6484a8e4204e15ac6e63de1192a73e";
+
+// ---- PAIRS ----
+// Twelve Data symbol formats: forex "EUR/GBP", crypto "BTC/USD",
+// commodity "XAU/USD", stock "AAPL" (bare ticker).
+// Exness symbol map: what the trade API expects.
 const PAIRS = [
   { label: "EUR/GBP", symbol: "EUR/GBP" },
   { label: "EUR/CHF", symbol: "EUR/CHF" },
   { label: "GBP/CHF", symbol: "GBP/CHF" },
   { label: "AUD/NZD", symbol: "AUD/NZD" },
   { label: "USD/CHF", symbol: "USD/CHF" },
+  { label: "XAU/USD", symbol: "XAU/USD" },   // Gold
+  { label: "XAG/USD", symbol: "XAG/USD" },   // Silver
+  { label: "BTC/USD", symbol: "BTC/USD" },   // Bitcoin
+  { label: "ETH/USD", symbol: "ETH/USD" },   // Ethereum
+  { label: "SOL/USD", symbol: "SOL/USD" },   // Solana (verify on Exness)
+  { label: "AAPL",    symbol: "AAPL"    },   // Apple stock
+  { label: "AMZN",    symbol: "AMZN"    },   // Amazon stock
 ];
-const SHOW_COUNT = 3;
+
+const SHOW_COUNT = 6;   // raised so more instruments can appear
 
 const INTERVAL = "30min";
 const CHART_INTERVAL = "30min";
@@ -133,7 +146,14 @@ const ADX_MIN = 22;
 const MIN_REWARD_RISK = 1.5;
 const PULLBACK_TOL_ATR = 0.4;
 
-const EXNESS_SYMBOL_MAP = { 'EUR/GBP': 'EURGBP', 'EUR/CHF': 'EURCHF', 'GBP/CHF': 'GBPCHF', 'AUD/NZD': 'AUDNZD', 'USD/CHF': 'USDCHF' };
+const EXNESS_SYMBOL_MAP = {
+  'EUR/GBP': 'EURGBP', 'EUR/CHF': 'EURCHF', 'GBP/CHF': 'GBPCHF',
+  'AUD/NZD': 'AUDNZD', 'USD/CHF': 'USDCHF',
+  'XAU/USD': 'XAUUSD', 'XAG/USD': 'XAGUSD',
+  'BTC/USD': 'BTCUSD', 'ETH/USD': 'ETHUSD',
+  'SOL/USD': 'SOLUSD',
+  'AAPL': 'AAPL', 'AMZN': 'AMZN',
+};
 const EXNESS_ACCOUNT_ID = '16000620992';
 
 const CHART_CACHE_MS = 5 * 60 * 1000;
