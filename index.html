@@ -45,33 +45,6 @@
   dialog::backdrop { background:rgba(0,0,0,.6); }
   .filter-note { font-size:11px; color:#ef4444; margin-top:4px; }
 
-  .dash { display:none; }
-  .dash.visible { display:block; }
-  .balance-card { background:#181b22; border:1px solid #222633; border-radius:12px; padding:16px; margin-bottom:16px; display:flex; flex-wrap:wrap; gap:20px; align-items:center; }
-  .bal-item { display:flex; flex-direction:column; }
-  .bal-item .lbl { font-size:11px; color:#8a93a6; letter-spacing:.5px; text-transform:uppercase; }
-  .bal-item .val { font-size:22px; font-variant-numeric:tabular-nums; font-weight:600; }
-  .bal-item .val.equity { color:#22c55e; }
-  .bal-item .val.free { color:#60a5fa; }
-  .bal-refresh-note { font-size:11px; color:#6b7280; margin-left:auto; }
-  .pos-table { width:100%; border-collapse:collapse; font-size:13px; }
-  .pos-table th { text-align:left; color:#8a93a6; font-weight:500; font-size:11px; text-transform:uppercase; padding:6px 8px; border-bottom:1px solid #222633; }
-  .pos-table td { padding:8px; border-bottom:1px solid #1a1e28; font-variant-numeric:tabular-nums; }
-  .pos-table tr:last-child td { border-bottom:0; }
-  .pos-side-BUY { color:#22c55e; font-weight:600; }
-  .pos-side-SELL { color:#ef4444; font-weight:600; }
-  .pos-pnl-pos { color:#22c55e; }
-  .pos-pnl-neg { color:#ef4444; }
-  .pos-actions { display:flex; gap:6px; }
-  .pos-actions button { padding:5px 10px; font-size:11px; border:0; border-radius:5px; cursor:pointer; font-weight:600; }
-  .pos-actions .btn-mod { background:#222633; color:#e6e8ec; }
-  .pos-actions .btn-mod:hover { background:#2d3345; }
-  .pos-actions .btn-close { background:rgba(239,68,68,.15); color:#ef4444; }
-  .pos-actions .btn-close:hover { background:rgba(239,68,68,.25); }
-  .pos-empty { text-align:center; color:#6b7280; padding:20px; font-size:13px; }
-  .section-head { display:flex; justify-content:space-between; align-items:center; margin:16px 0 8px; }
-  .section-head button { padding:6px 12px; background:#222633; color:#e6e8ec; border:0; border-radius:6px; cursor:pointer; font-size:12px; }
-
   .chart-toggle { margin:12px 0 0; width:100%; padding:8px; background:#222633; color:#e6e8ec; border:0; border-radius:6px; cursor:pointer; font-size:12px; font-weight:600; letter-spacing:.5px; }
   .chart-toggle:hover { background:#2d3345; }
   .chart-wrap { display:none; margin-top:12px; border-radius:8px; overflow:hidden; background:#12151c; border:1px solid #222633; }
@@ -88,23 +61,14 @@
 
 <div class="header-row">
   <h1>FIXORIUM</h1>
-  <div style="display:flex; align-items:center; gap:4px;">
-    <button id="unlockIconBtn" class="icon-btn" title="Unlock account" aria-label="Unlock account" style="position:relative;">
-      <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
-        <circle cx="12" cy="8" r="4"></circle>
-        <path d="M4 21v-1a8 8 0 0 1 16 0v1"></path>
-      </svg>
-      <span style="position:absolute; top:2px; right:2px; background:#ef4444; color:#fff; font-size:10px; font-weight:700; border-radius:999px; padding:0 4px; line-height:14px; height:14px; min-width:14px; text-align:center;">!!</span>
-    </button>
-    <button id="refresh" class="icon-btn" title="Refresh signals" aria-label="Refresh signals">
-      <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
-        <line x1="20" y1="8" x2="5" y2="8"></line>
-        <polyline points="9 4 5 8 9 12"></polyline>
-        <line x1="4" y1="16" x2="19" y2="16"></line>
-        <polyline points="15 12 19 16 15 20"></polyline>
-      </svg>
-    </button>
-  </div>
+  <button id="refresh" class="icon-btn" title="Refresh signals" aria-label="Refresh signals">
+    <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+      <line x1="20" y1="8" x2="5" y2="8"></line>
+      <polyline points="9 4 5 8 9 12"></polyline>
+      <line x1="4" y1="16" x2="19" y2="16"></line>
+      <polyline points="15 12 19 16 15 20"></polyline>
+    </svg>
+  </button>
 </div>
 
 <div class="marquee-bar">
@@ -115,39 +79,7 @@
   </div>
 </div>
 
-<div class="dash" id="dash">
-  <h2>Account</h2>
-  <div class="balance-card">
-    <div class="bal-item"><span class="lbl">Balance</span><span class="val" id="balBalance">—</span></div>
-    <div class="bal-item"><span class="lbl">Equity</span><span class="val equity" id="balEquity">—</span></div>
-    <div class="bal-item"><span class="lbl">Free Margin</span><span class="val free" id="balFree">—</span></div>
-    <div class="bal-item"><span class="lbl">Currency</span><span class="val" id="balCurrency" style="font-size:16px;">—</span></div>
-    <div class="bal-refresh-note" id="balNote">auto-refresh every 2s</div>
-  </div>
-
-  <div class="section-head">
-    <h2 style="margin:0;">Open Positions</h2>
-    <div style="display:flex; gap:6px;">
-      <button id="posRefreshBtn">REFRESH</button>
-      <button id="lockBtn" style="background:rgba(239,68,68,.15); color:#ef4444;">LOCK</button>
-    </div>
-  </div>
-  <div class="card" style="padding:8px; text-transform:none;">
-    <table class="pos-table">
-      <thead>
-        <tr>
-          <th>Symbol</th><th>Side</th><th>Volume</th><th>Entry</th>
-          <th>SL</th><th>TP</th><th>P/L</th><th>Actions</th>
-        </tr>
-      </thead>
-      <tbody id="posBody">
-        <tr><td colspan="8" class="pos-empty">Unlock to load positions</td></tr>
-      </tbody>
-    </table>
-  </div>
-</div>
-
-<h2 style="margin-top:24px;">Signals</h2>
+<h2>Signals</h2>
 <div style="margin-bottom:12px;"><span class="badge" id="status">IDLE</span></div>
 <div class="grid" id="cards"></div>
 <div class="news" id="errorsBox"></div>
@@ -158,20 +90,6 @@
   </a>
 </div>
 
-<dialog id="unlockDialog" style="background:#181b22; color:#e6e8ec; border:1px solid #222633; border-radius:12px; padding:20px; max-width:420px; width:90%; font-family:system-ui,sans-serif;">
-  <h3 style="margin:0 0 12px; font-size:16px;">UNLOCK ACCOUNT</h3>
-  <div style="font-size:13px; color:#8a93a6; margin-bottom:16px;">
-    Enter the admin password to view live balance, open positions, and to modify or close trades without leaving this page.
-  </div>
-  <label style="display:block; font-size:12px; color:#8a93a6; margin-bottom:4px;">ADMIN PASSWORD</label>
-  <input id="unlockPassword" type="password" placeholder="Enter admin password" autocomplete="current-password" style="width:100%; padding:8px; background:#12151c; color:#e6e8ec; border:1px solid #222633; border-radius:6px; font-size:14px; margin-bottom:12px; box-sizing:border-box;">
-  <div id="unlockError" style="color:#ef4444; font-size:12px; margin-bottom:8px; display:none;"></div>
-  <div style="display:flex; gap:8px;">
-    <button id="unlockCancel" style="flex:1; padding:10px; background:#222633; color:#e6e8ec; border:0; border-radius:6px; cursor:pointer; font-size:13px;">CANCEL</button>
-    <button id="unlockSubmit" style="flex:1; padding:10px; background:#2563eb; color:#fff; border:0; border-radius:6px; cursor:pointer; font-size:13px; font-weight:600;">UNLOCK</button>
-  </div>
-</dialog>
-
 <dialog id="tradeDialog" style="background:#181b22; color:#e6e8ec; border:1px solid #222633; border-radius:12px; padding:20px; max-width:420px; width:90%; font-family:system-ui,sans-serif;">
   <h3 style="margin:0 0 12px; font-size:16px;">EXECUTE TRADE</h3>
   <div id="dialogSignalInfo" style="font-size:13px; color:#8a93a6; margin-bottom:16px;"></div>
@@ -181,20 +99,6 @@
   <div style="display:flex; gap:8px;">
     <button id="dialogCancel" style="flex:1; padding:10px; background:#222633; color:#e6e8ec; border:0; border-radius:6px; cursor:pointer; font-size:13px;">CANCEL</button>
     <button id="dialogExecute" style="flex:1; padding:10px; background:#22c55e; color:#fff; border:0; border-radius:6px; cursor:pointer; font-size:13px; font-weight:600;">EXECUTE</button>
-  </div>
-</dialog>
-
-<dialog id="modDialog" style="background:#181b22; color:#e6e8ec; border:1px solid #222633; border-radius:12px; padding:20px; max-width:420px; width:90%; font-family:system-ui,sans-serif;">
-  <h3 style="margin:0 0 12px; font-size:16px;">MODIFY POSITION</h3>
-  <div id="modInfo" style="font-size:13px; color:#8a93a6; margin-bottom:16px;"></div>
-  <label style="display:block; font-size:12px; color:#8a93a6; margin-bottom:4px;">STOP LOSS (empty = remove)</label>
-  <input id="modSL" type="text" inputmode="decimal" placeholder="e.g. 1.08340" style="width:100%; padding:8px; background:#12151c; color:#e6e8ec; border:1px solid #222633; border-radius:6px; font-size:14px; margin-bottom:12px; box-sizing:border-box;">
-  <label style="display:block; font-size:12px; color:#8a93a6; margin-bottom:4px;">TAKE PROFIT (empty = remove)</label>
-  <input id="modTP" type="text" inputmode="decimal" placeholder="e.g. 1.09500" style="width:100%; padding:8px; background:#12151c; color:#e6e8ec; border:1px solid #222633; border-radius:6px; font-size:14px; margin-bottom:12px; box-sizing:border-box;">
-  <div id="modError" style="color:#ef4444; font-size:12px; margin-bottom:8px; display:none;"></div>
-  <div style="display:flex; gap:8px;">
-    <button id="modCancel" style="flex:1; padding:10px; background:#222633; color:#e6e8ec; border:0; border-radius:6px; cursor:pointer; font-size:13px;">CANCEL</button>
-    <button id="modSubmit" style="flex:1; padding:10px; background:#2563eb; color:#fff; border:0; border-radius:6px; cursor:pointer; font-size:13px; font-weight:600;">SAVE</button>
   </div>
 </dialog>
 
@@ -214,7 +118,6 @@ const PAIRS = [
 ];
 const SHOW_COUNT = 3;
 
-// ---- TIMEFRAME: 30 minutes (signal matches chart) ----
 const INTERVAL = "30min";
 const CHART_INTERVAL = "30min";
 
@@ -224,21 +127,17 @@ const ACCOUNT_BALANCE_USD = 1000;
 const RISK_PERCENT = 1.0;
 const FIXED_LOT_SIZE = 0.01;
 
-// ---- 30M TUNING ----
 const SL_ATR_MULT = 2.5;
 const TP_ATR_MULT = 5.0;
-const ADX_MIN = 22;              // 30m is noisier -> raise from 20 to 22
+const ADX_MIN = 22;
 const MIN_REWARD_RISK = 1.5;
-const PULLBACK_TOL_ATR = 0.4;    // tighter pullback zone on faster timeframe
+const PULLBACK_TOL_ATR = 0.4;
 
 const EXNESS_SYMBOL_MAP = { 'EUR/GBP': 'EURGBP', 'EUR/CHF': 'EURCHF', 'GBP/CHF': 'GBPCHF', 'AUD/NZD': 'AUDNZD', 'USD/CHF': 'USDCHF' };
 const EXNESS_ACCOUNT_ID = '16000620992';
 
 const CHART_CACHE_MS = 5 * 60 * 1000;
 const chartCache = new Map();
-
-let ADMIN_PASSWORD = null;
-let balanceTimer = null;
 const openCharts = new Map();
 
 /* ==================================================================
@@ -303,7 +202,7 @@ function emaSeries(values, period) {
 }
 
 /* ==================================================================
-   FETCH SIGNAL DATA (30m)
+   FETCH SIGNAL DATA
 ================================================================== */
 async function fetchSeries(pair) {
   const url = `https://api.twelvedata.com/time_series?symbol=${encodeURIComponent(pair.symbol)}&interval=${INTERVAL}&outputsize=${OUTPUTSIZE}&apikey=${TWELVE_DATA_KEY}`;
@@ -322,7 +221,7 @@ async function fetchSeries(pair) {
 }
 
 /* ==================================================================
-   EVALUATE (30m signal logic)
+   EVALUATE
 ================================================================== */
 function evaluate(candles) {
   const closes = candles.map(c => c.close);
@@ -455,7 +354,6 @@ function computeSR(candles, lookback = 50) {
 
 /* ==================================================================
    RENDER SIGNAL CARDS
-   Order: pair -> price -> indicators -> levels -> CHART -> signal -> confidence
 ================================================================== */
 const cardsEl = document.getElementById("cards");
 const statusEl = document.getElementById("status");
@@ -630,7 +528,7 @@ cardsEl.addEventListener("click", async (e) => {
   if (!symbol) { alert('No Exness symbol mapping for ' + pairLabel); return; }
   pendingTrade = { signal, pairLabel, entry, tp, sl, symbol };
   dialogSignalInfo.innerHTML = `<strong style="color:#e6e8ec;">${signal} ${pairLabel}</strong><br>Entry (limit @ EMA20): ${entry.toFixed(4)} · TP: ${tp ? tp.toFixed(4) : '—'} · SL: ${sl ? sl.toFixed(4) : '—'}`;
-  dialogPassword.value = ADMIN_PASSWORD || '';
+  dialogPassword.value = '';
   dialogError.style.display = 'none';
   tradeDialog.showModal();
 });
@@ -674,290 +572,12 @@ dialogExecute.addEventListener('click', async () => {
     alert('Order accepted. Operation ID: ' + (data.operation_id || '—'));
     tradeDialog.close();
     pendingTrade = null;
-    if (ADMIN_PASSWORD) setTimeout(loadPositions, 2000);
   } catch (err) {
     dialogError.textContent = 'Network error: ' + err.message;
     dialogError.style.display = 'block';
   } finally {
     dialogExecute.disabled = false;
     dialogExecute.textContent = 'EXECUTE';
-  }
-});
-
-/* ==================================================================
-   AUTH / UNLOCK
-================================================================== */
-const unlockIconBtn = document.getElementById('unlockIconBtn');
-const unlockDialog  = document.getElementById('unlockDialog');
-const unlockPassword= document.getElementById('unlockPassword');
-const unlockError   = document.getElementById('unlockError');
-const unlockCancel  = document.getElementById('unlockCancel');
-const unlockSubmit  = document.getElementById('unlockSubmit');
-const lockBtn       = document.getElementById('lockBtn');
-const dash          = document.getElementById('dash');
-
-unlockIconBtn.addEventListener('click', () => {
-  unlockPassword.value = '';
-  unlockError.style.display = 'none';
-  unlockDialog.showModal();
-  setTimeout(() => unlockPassword.focus(), 50);
-});
-
-unlockCancel.addEventListener('click', () => unlockDialog.close());
-unlockPassword.addEventListener('keydown', (e) => {
-  if (e.key === 'Enter') { e.preventDefault(); unlockSubmit.click(); }
-});
-
-unlockSubmit.addEventListener('click', async () => {
-  const pw = unlockPassword.value;
-  if (!pw) {
-    unlockError.textContent = 'Enter the admin password.';
-    unlockError.style.display = 'block';
-    return;
-  }
-  unlockError.style.display = 'none';
-  unlockSubmit.disabled = true;
-  unlockSubmit.textContent = 'CHECKING…';
-  try {
-    const res = await fetch('/api/exness/verify-admin', {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ adminPassword: pw }),
-    });
-    if (!res.ok) {
-      const data = await res.json().catch(() => ({}));
-      throw new Error(data.error || 'Invalid password');
-    }
-    ADMIN_PASSWORD = pw;
-    unlockDialog.close();
-    unlockIconBtn.style.display = 'none';
-    dash.classList.add('visible');
-    loadBalance();
-    loadPositions();
-    if (balanceTimer) clearInterval(balanceTimer);
-    balanceTimer = setInterval(loadBalance, 2000);
-  } catch (err) {
-    unlockError.textContent = err.message || 'Unlock failed.';
-    unlockError.style.display = 'block';
-  } finally {
-    unlockSubmit.disabled = false;
-    unlockSubmit.textContent = 'UNLOCK';
-  }
-});
-
-lockBtn.addEventListener('click', () => {
-  ADMIN_PASSWORD = null;
-  if (balanceTimer) { clearInterval(balanceTimer); balanceTimer = null; }
-  dash.classList.remove('visible');
-  unlockIconBtn.style.display = '';
-  unlockPassword.value = '';
-  ['balBalance','balEquity','balFree','balCurrency'].forEach(id => document.getElementById(id).textContent = '—');
-  document.getElementById('posBody').innerHTML = '<tr><td colspan="8" class="pos-empty">Unlock to load positions</td></tr>';
-});
-
-/* ==================================================================
-   BALANCE
-================================================================== */
-const balBalance = document.getElementById('balBalance');
-const balEquity  = document.getElementById('balEquity');
-const balFree    = document.getElementById('balFree');
-const balCurrency= document.getElementById('balCurrency');
-const balNote    = document.getElementById('balNote');
-
-function money(v, cur) {
-  if (v === null || v === undefined || v === '—') return '—';
-  const n = Number(v);
-  if (!isFinite(n)) return String(v);
-  return n.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 }) + (cur ? ' ' + cur : '');
-}
-
-async function loadBalance() {
-  if (!ADMIN_PASSWORD) return;
-  try {
-    const res = await fetch('/api/exness/accounts?adminPassword=' + encodeURIComponent(ADMIN_PASSWORD));
-    const data = await res.json().catch(() => ({}));
-    if (!res.ok) {
-      balNote.textContent = 'balance: ' + (data.error || res.status);
-      return;
-    }
-    const acc = (data.accounts && data.accounts[0]) || {};
-    balBalance.textContent = money(acc.balance, acc.currency);
-    balEquity.textContent  = money(acc.equity, acc.currency);
-    balFree.textContent    = money(acc.freeMargin, acc.currency);
-    balCurrency.textContent= acc.currency || '—';
-    balNote.textContent = 'updated ' + new Date().toLocaleTimeString();
-  } catch (err) {
-    balNote.textContent = 'balance: ' + err.message;
-  }
-}
-
-/* ==================================================================
-   POSITIONS
-================================================================== */
-const posBody = document.getElementById('posBody');
-const posRefreshBtn = document.getElementById('posRefreshBtn');
-posRefreshBtn.addEventListener('click', loadPositions);
-
-function pick(obj, keys, fallback) {
-  for (const k of keys) {
-    if (obj && obj[k] !== undefined && obj[k] !== null) return obj[k];
-  }
-  return fallback;
-}
-
-function normalizePositions(raw) {
-  let arr = raw;
-  if (!Array.isArray(arr)) arr = raw.positions || raw.data || raw.items || [];
-  if (!Array.isArray(arr)) arr = [];
-  return arr.map(p => {
-    const symbol = pick(p, ['symbol','instrument','ticker'], '—');
-    const rawSide = pick(p, ['side','type','direction'], '');
-    const sideUpper = String(rawSide).toUpperCase();
-    const side = (sideUpper === 'BUY' || sideUpper === 'SELL') ? sideUpper : sideUpper;
-    const volume = pick(p, ['volume','qty','quantity'], '—');
-    const entry  = pick(p, ['open_price','entry_price','price','avg_price'], '—');
-    const sl     = pick(p, ['stop_loss_price','sl_price','stop_loss'], null);
-    const tp     = pick(p, ['take_profit_price','tp_price','take_profit'], null);
-    const pnl    = pick(p, ['profit','unrealized_pnl','pnl','unrealized_profit'], null);
-    const orderId= pick(p, ['order_id','id','position_id','ticket'], null);
-    return { symbol, side, volume, entry, sl, tp, pnl, orderId };
-  });
-}
-
-async function loadPositions() {
-  if (!ADMIN_PASSWORD) return;
-  posBody.innerHTML = '<tr><td colspan="8" class="pos-empty">Loading…</td></tr>';
-  try {
-    const res = await fetch('/api/exness/positions?adminPassword=' + encodeURIComponent(ADMIN_PASSWORD));
-    const data = await res.json().catch(() => ({}));
-    if (!res.ok) {
-      posBody.innerHTML = `<tr><td colspan="8" class="pos-empty" style="color:#ef4444;">${data.error || ('HTTP ' + res.status)}</td></tr>`;
-      return;
-    }
-    const list = normalizePositions(data);
-    if (!list.length) {
-      posBody.innerHTML = '<tr><td colspan="8" class="pos-empty">No open positions</td></tr>';
-      return;
-    }
-    posBody.innerHTML = '';
-    list.forEach(p => {
-      const pnlCls = (p.pnl !== null && Number(p.pnl) >= 0) ? 'pos-pnl-pos' : 'pos-pnl-neg';
-      const pnlTxt = (p.pnl === null || p.pnl === '—') ? '—' : Number(p.pnl).toFixed(2);
-      const slTxt = p.sl === null || p.sl === undefined || p.sl === '—' ? '—' : String(p.sl);
-      const tpTxt = p.tp === null || p.tp === undefined || p.tp === '—' ? '—' : String(p.tp);
-      posBody.insertAdjacentHTML('beforeend', `
-        <tr data-order-id="${p.orderId ?? ''}">
-          <td>${p.symbol}</td>
-          <td class="pos-side-${p.side}">${p.side}</td>
-          <td>${p.volume}</td>
-          <td>${p.entry}</td>
-          <td>${slTxt}</td>
-          <td>${tpTxt}</td>
-          <td class="${pnlCls}">${pnlTxt}</td>
-          <td>
-            <div class="pos-actions">
-              <button class="btn-mod" data-act="modify" data-order-id="${p.orderId ?? ''}" data-symbol="${p.symbol}" data-sl="${slTxt}" data-tp="${tpTxt}">MODIFY</button>
-              <button class="btn-close" data-act="close" data-order-id="${p.orderId ?? ''}" data-symbol="${p.symbol}">CLOSE</button>
-            </div>
-          </td>
-        </tr>`);
-    });
-  } catch (err) {
-    posBody.innerHTML = `<tr><td colspan="8" class="pos-empty" style="color:#ef4444;">${err.message}</td></tr>`;
-  }
-}
-
-posBody.addEventListener('click', async (e) => {
-  const btn = e.target.closest('button[data-act]');
-  if (!btn) return;
-  const act = btn.dataset.act;
-  const orderId = btn.dataset.orderId;
-  const symbol = btn.dataset.symbol;
-  if (!orderId) { alert('Missing order id — cannot act on this position.'); return; }
-  if (!ADMIN_PASSWORD) { alert('Please unlock first.'); return; }
-
-  if (act === 'close') {
-    if (!confirm(`Close ${symbol} (order ${orderId})?`)) return;
-    btn.disabled = true; btn.textContent = '…';
-    try {
-      const res = await fetch('/api/exness/close', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ orderId, adminPassword: ADMIN_PASSWORD }),
-      });
-      const data = await res.json().catch(() => ({}));
-      if (!res.ok) throw new Error(data.error || ('HTTP ' + res.status));
-      setTimeout(loadPositions, 1500);
-      setTimeout(loadPositions, 4000);
-    } catch (err) {
-      alert('Close failed: ' + err.message);
-      btn.disabled = false; btn.textContent = 'CLOSE';
-    }
-    return;
-  }
-
-  if (act === 'modify') {
-    openModifyDialog(orderId, symbol, btn.dataset.sl, btn.dataset.tp);
-  }
-});
-
-/* ==================================================================
-   MODIFY DIALOG
-================================================================== */
-const modDialog = document.getElementById('modDialog');
-const modInfo = document.getElementById('modInfo');
-const modSL = document.getElementById('modSL');
-const modTP = document.getElementById('modTP');
-const modError = document.getElementById('modError');
-const modCancel = document.getElementById('modCancel');
-const modSubmit = document.getElementById('modSubmit');
-let pendingModify = null;
-
-function openModifyDialog(orderId, symbol, sl, tp) {
-  pendingModify = { orderId, symbol };
-  modInfo.innerHTML = `<strong style="color:#e6e8ec;">${symbol}</strong> · order ${orderId}<br>Leave a field empty to <em>remove</em> that level.`;
-  modSL.value = (sl && sl !== '—') ? sl : '';
-  modTP.value = (tp && tp !== '—') ? tp : '';
-  modError.style.display = 'none';
-  modDialog.showModal();
-}
-
-modCancel.addEventListener('click', () => { modDialog.close(); pendingModify = null; });
-
-modSubmit.addEventListener('click', async () => {
-  if (!pendingModify || !ADMIN_PASSWORD) { modDialog.close(); return; }
-  const { orderId } = pendingModify;
-
-  const sl = modSL.value.trim() === '' ? null : modSL.value.trim();
-  const tp = modTP.value.trim() === '' ? null : modTP.value.trim();
-
-  const numRe = /^[+]?(?:(?:0*[1-9][0-9]*)(?:\.[0-9]+)?|0+\.[0-9]*[1-9][0-9]*)$/;
-  if (sl !== null && !numRe.test(sl)) { modError.textContent = 'Stop Loss must be a valid positive number.'; modError.style.display = 'block'; return; }
-  if (tp !== null && !numRe.test(tp)) { modError.textContent = 'Take Profit must be a valid positive number.'; modError.style.display = 'block'; return; }
-
-  modSubmit.disabled = true;
-  modSubmit.textContent = 'SAVING…';
-  modError.style.display = 'none';
-  try {
-    const body = { orderId, adminPassword: ADMIN_PASSWORD, stopLoss: sl, takeProfit: tp };
-    const res = await fetch('/api/exness/modify', {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify(body),
-    });
-    const data = await res.json().catch(() => ({}));
-    if (!res.ok) throw new Error(data.error || data.detail?.error_message || ('HTTP ' + res.status));
-    modDialog.close();
-    pendingModify = null;
-    setTimeout(loadPositions, 1500);
-    setTimeout(loadPositions, 4000);
-    setTimeout(loadPositions, 8000);
-  } catch (err) {
-    modError.textContent = err.message;
-    modError.style.display = 'block';
-  } finally {
-    modSubmit.disabled = false;
-    modSubmit.textContent = 'SAVE';
   }
 });
 
