@@ -1,24 +1,38 @@
 // functions/api/exness/positions.js
-// GET /api/exness/positions
-// Flow: Gateway discovery -> Access Point -> positions.
-// Correct path: /v1/trading/accounts/{account_id}/positions
+// GET /api/exness/positions?adminPassword=...   (or ?sessionToken=...)
+// Returns open positions from the Exness Access Point.
 
 import { exnessFetch } from './_auth.js';
+import { verifySessionToken } from './auth.js';
 
 const EXNESS_ACCOUNT_ID = '16000620992';
 
 export async function onRequestGet(context) {
-  const { env } = context;
+  const { request, env } = context;
   const corsHeaders = {
     'Access-Control-Allow-Origin': '*',
     'Content-Type': 'application/json',
   };
 
   try {
-    // 1. Gateway host
-    const gateway = (env.EXNESS_GATEWAY_HOST || 'https://api.exness.com').replace(/\/+$/, '');
+    const url = new URL(request.url);
 
-    // 2. Discover Access Point
+    // ---- AUTH GATE ----
+    const sessionToken = url.searchParams.get('sessionToken');
+    const adminPassword = url.searchParams.get('adminPassword');
+
+    const sessionOk = sessionToken ? await verifySessionToken(sessionToken, env) : false;
+    const adminOk = !!env.ADMIN_TRADE_PASSWORD && adminPassword === env.ADMIN_TRADE_PASSWORD;
+
+    if (!sessionOk && !adminOk) {
+      return new Response(JSON.stringify({ error: 'SESSION_INVALID_OR_EXPIRED' }), {
+        status: 403,
+        headers: corsHeaders,
+      });
+    }
+
+    // ---- Gateway + Access Point ----
+    const gateway = (env.EXNESS_GATEWAY_HOST || 'https://api.exness.com').replace(/\/+$/, '');
     const discoveryPath = `/v1/trading/access-point?account_id=${EXNESS_ACCOUNT_ID}`;
     const apRes = await exnessFetch(`${gateway}${discoveryPath}`, 'GET', null, env);
     const apData = await apRes.json().catch(() => ({}));
@@ -33,8 +47,7 @@ export async function onRequestGet(context) {
 
     const apBase = apData.access_point.replace(/\/+$/, '');
 
-    // 3. Fetch positions from Access Point
-    // Correct path: /v1/trading/accounts/{account_id}/positions
+    // ---- Positions ----
     const positionsPath = `/v1/trading/accounts/${EXNESS_ACCOUNT_ID}/positions`;
     const posRes = await exnessFetch(`${apBase}${positionsPath}`, 'GET', null, env);
     const posData = await posRes.json().catch(() => ({}));
@@ -47,7 +60,11 @@ export async function onRequestGet(context) {
       }), { status: posRes.status, headers: corsHeaders });
     }
 
-    return new Response(JSON.stringify(posData), {
+    // Normalize: Exness may return { positions: [...] } or a bare array.
+    let list = posData;
+    if (!Array.isArray(list)) list = posData.positions || posData.data || posData.items || [];
+
+    return new Response(JSON.stringify({ positions: list }), {
       status: 200,
       headers: corsHeaders,
     });
