@@ -1,17 +1,15 @@
 // functions/api/exness/modify.js
-// PATCH /api/exness/modify
+// POST /api/exness/modify
+// Body: { orderId, stopLoss?, takeProfit?, price?, comment?, adminPassword }
 //
 // Proxies to Exness:
 //   PATCH /v1/trading/accounts/{account_id}/orders/{order_id}
 //
-// Body (from frontend):
-//   { orderId, stopLoss?, takeProfit?, price?, adminPassword }
-//
-// Behaviour per Exness spec:
+// Exness rules:
 //   - omitted field  = not changed
 //   - string value   = set new price
 //   - null           = remove SL/TP
-//   - returns 202 ACK with operation_id (result arrives via Server Events)
+//   - returns 202 ACK with operation_id (async; result via Server Events)
 
 import { exnessFetch } from './_auth.js';
 
@@ -25,29 +23,28 @@ export async function onRequestPost(context) {
   };
 
   try {
-    const body = await request.json();
+    const body = await request.json().catch(() => ({}));
     const { orderId, stopLoss, takeProfit, price, comment, adminPassword } = body;
 
-    // 1. Admin password gate (same as close.js)
     if (!env.ADMIN_TRADE_PASSWORD || adminPassword !== env.ADMIN_TRADE_PASSWORD) {
-      return new Response(JSON.stringify({
-        error: 'ADMIN_PASSWORD_INVALID: Incorrect or missing admin password',
-      }), { status: 403, headers: corsHeaders });
+      return new Response(JSON.stringify({ error: 'ADMIN_PASSWORD_INVALID' }), {
+        status: 403,
+        headers: corsHeaders,
+      });
     }
 
     if (!orderId) {
-      return new Response(JSON.stringify({
-        error: 'Missing required field: orderId',
-      }), { status: 400, headers: corsHeaders });
+      return new Response(JSON.stringify({ error: 'Missing required field: orderId' }), {
+        status: 400,
+        headers: corsHeaders,
+      });
     }
 
-    // 2. Build request body — only include fields the client actually sent.
-    //    Omitted = unchanged; null = remove SL/TP.
     const exnessBody = {};
-    if (price !== undefined)      exnessBody.price = price;
-    if (stopLoss !== undefined)   exnessBody.stop_loss_price = stopLoss;   // string or null
+    if (price !== undefined) exnessBody.price = price;
+    if (stopLoss !== undefined) exnessBody.stop_loss_price = stopLoss;
     if (takeProfit !== undefined) exnessBody.take_profit_price = takeProfit;
-    if (comment !== undefined)    exnessBody.comment = comment;
+    if (comment !== undefined) exnessBody.comment = comment;
 
     if (Object.keys(exnessBody).length === 0) {
       return new Response(JSON.stringify({
@@ -55,7 +52,7 @@ export async function onRequestPost(context) {
       }), { status: 400, headers: corsHeaders });
     }
 
-    // 3. Gateway + Access Point discovery (same flow as positions.js)
+    // ---- Gateway + Access Point ----
     const gateway = (env.EXNESS_GATEWAY_HOST || 'https://api.exness.com').replace(/\/+$/, '');
     const discoveryPath = `/v1/trading/access-point?account_id=${EXNESS_ACCOUNT_ID}`;
     const apRes = await exnessFetch(`${gateway}${discoveryPath}`, 'GET', null, env);
@@ -70,9 +67,8 @@ export async function onRequestPost(context) {
     }
 
     const apBase = apData.access_point.replace(/\/+$/, '');
-
-    // 4. PATCH the order
     const modifyPath = `/v1/trading/accounts/${EXNESS_ACCOUNT_ID}/orders/${orderId}`;
+
     const exnessRes = await exnessFetch(`${apBase}${modifyPath}`, 'PATCH', exnessBody, env);
     const data = await exnessRes.json().catch(() => ({}));
 
@@ -84,8 +80,6 @@ export async function onRequestPost(context) {
       }), { status: exnessRes.status, headers: corsHeaders });
     }
 
-    // 5. 202 ACK — operation is async. Return operation_id so the frontend
-    //    can correlate it with the Server Events stream / re-poll positions.
     return new Response(JSON.stringify({
       ok: true,
       operation_id: data.operation_id || null,
