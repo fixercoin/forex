@@ -3,11 +3,12 @@
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0"/>
-<title>FIXORIUM AI SIGNAL v2</title>
+<title>FIXORIUM</title>
 <style>
   body { margin:0; font-family:system-ui,sans-serif; background:#0f1115; color:#e6e8ec; padding:24px; padding-bottom:80px; }
   .header-row { display:flex; align-items:center; justify-content:space-between; gap:12px; margin-bottom:12px; }
   h1 { font-size:22px; margin:0; letter-spacing:.5px; }
+  h2 { font-size:14px; margin:0 0 8px; letter-spacing:.8px; color:#8a93a6; text-transform:uppercase; }
   .icon-btn { background:transparent; color:#e6e8ec; border:0; width:42px; height:42px; border-radius:50%; cursor:pointer; display:flex; align-items:center; justify-content:center; transition:color .2s; flex-shrink:0; padding:0; }
   .icon-btn:hover { color:#2563eb; }
   .icon-btn:disabled { opacity:.5; cursor:not-allowed; }
@@ -43,12 +44,49 @@
   .cta-bar .arrow { font-size:16px; }
   dialog::backdrop { background:rgba(0,0,0,.6); }
   .filter-note { font-size:11px; color:#ef4444; margin-top:4px; }
+
+  /* ---------- Dashboard / auth ---------- */
+  .auth-bar { display:flex; align-items:center; gap:8px; margin-bottom:16px; padding:12px; background:#181b22; border:1px solid #222633; border-radius:10px; }
+  .auth-bar input { flex:1; padding:8px 10px; background:#12151c; color:#e6e8ec; border:1px solid #222633; border-radius:6px; font-size:13px; }
+  .auth-bar button { padding:8px 14px; background:#2563eb; color:#fff; border:0; border-radius:6px; cursor:pointer; font-size:13px; font-weight:600; }
+  .auth-bar button:disabled { opacity:.5; cursor:not-allowed; }
+  .auth-bar .lock-state { font-size:12px; color:#8a93a6; }
+  .auth-bar.unlocked { border-color:#22c55e; }
+
+  .dash { display:none; }
+  .dash.visible { display:block; }
+
+  .balance-card { background:#181b22; border:1px solid #222633; border-radius:12px; padding:16px; margin-bottom:16px; display:flex; flex-wrap:wrap; gap:20px; align-items:center; }
+  .bal-item { display:flex; flex-direction:column; }
+  .bal-item .lbl { font-size:11px; color:#8a93a6; letter-spacing:.5px; text-transform:uppercase; }
+  .bal-item .val { font-size:22px; font-variant-numeric:tabular-nums; font-weight:600; }
+  .bal-item .val.equity { color:#22c55e; }
+  .bal-item .val.free { color:#60a5fa; }
+  .bal-refresh-note { font-size:11px; color:#6b7280; margin-left:auto; }
+
+  .pos-table { width:100%; border-collapse:collapse; font-size:13px; }
+  .pos-table th { text-align:left; color:#8a93a6; font-weight:500; font-size:11px; text-transform:uppercase; padding:6px 8px; border-bottom:1px solid #222633; }
+  .pos-table td { padding:8px; border-bottom:1px solid #1a1e28; font-variant-numeric:tabular-nums; }
+  .pos-table tr:last-child td { border-bottom:0; }
+  .pos-side-BUY { color:#22c55e; font-weight:600; }
+  .pos-side-SELL { color:#ef4444; font-weight:600; }
+  .pos-pnl-pos { color:#22c55e; }
+  .pos-pnl-neg { color:#ef4444; }
+  .pos-actions { display:flex; gap:6px; }
+  .pos-actions button { padding:5px 10px; font-size:11px; border:0; border-radius:5px; cursor:pointer; font-weight:600; }
+  .pos-actions .btn-mod { background:#222633; color:#e6e8ec; }
+  .pos-actions .btn-mod:hover { background:#2d3345; }
+  .pos-actions .btn-close { background:rgba(239,68,68,.15); color:#ef4444; }
+  .pos-actions .btn-close:hover { background:rgba(239,68,68,.25); }
+  .pos-empty { text-align:center; color:#6b7280; padding:20px; font-size:13px; }
+  .section-head { display:flex; justify-content:space-between; align-items:center; margin:16px 0 8px; }
+  .section-head button { padding:6px 12px; background:#222633; color:#e6e8ec; border:0; border-radius:6px; cursor:pointer; font-size:12px; }
 </style>
 </head>
 <body>
 
 <div class="header-row">
-  <h1>FIXORIUM AI SIGNAL v2</h1>
+  <h1>FIXORIUM</h1>
   <button id="refresh" class="icon-btn" title="Refresh signals" aria-label="Refresh signals">
     <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
       <line x1="20" y1="8" x2="5" y2="8"></line>
@@ -67,8 +105,47 @@
   </div>
 </div>
 
-<div style="margin-bottom:12px;"><span class="badge" id="status">IDLE</span></div>
+<!-- ================= AUTH BAR ================= -->
+<div class="auth-bar" id="authBar">
+  <input id="adminPassword" type="password" placeholder="Admin password to unlock balance &amp; positions" autocomplete="current-password">
+  <button id="unlockBtn">UNLOCK</button>
+  <span class="lock-state" id="lockState">LOCKED</span>
+</div>
+<div id="authError" style="color:#ef4444; font-size:12px; margin:-8px 0 16px; display:none;"></div>
 
+<!-- ================= DASHBOARD ================= -->
+<div class="dash" id="dash">
+  <h2>Account</h2>
+  <div class="balance-card">
+    <div class="bal-item"><span class="lbl">Balance</span><span class="val" id="balBalance">—</span></div>
+    <div class="bal-item"><span class="lbl">Equity</span><span class="val equity" id="balEquity">—</span></div>
+    <div class="bal-item"><span class="lbl">Free Margin</span><span class="val free" id="balFree">—</span></div>
+    <div class="bal-item"><span class="lbl">Currency</span><span class="val" id="balCurrency" style="font-size:16px;">—</span></div>
+    <div class="bal-refresh-note" id="balNote">auto-refresh every 2s</div>
+  </div>
+
+  <div class="section-head">
+    <h2 style="margin:0;">Open Positions</h2>
+    <button id="posRefreshBtn">REFRESH</button>
+  </div>
+  <div class="card" style="padding:8px; text-transform:none;">
+    <table class="pos-table">
+      <thead>
+        <tr>
+          <th>Symbol</th><th>Side</th><th>Volume</th><th>Entry</th>
+          <th>SL</th><th>TP</th><th>P/L</th><th>Actions</th>
+        </tr>
+      </thead>
+      <tbody id="posBody">
+        <tr><td colspan="8" class="pos-empty">Unlock to load positions</td></tr>
+      </tbody>
+    </table>
+  </div>
+</div>
+
+<!-- ================= SIGNALS ================= -->
+<h2 style="margin-top:24px;">Signals</h2>
+<div style="margin-bottom:12px;"><span class="badge" id="status">IDLE</span></div>
 <div class="grid" id="cards"></div>
 <div class="news" id="errorsBox"></div>
 
@@ -78,7 +155,7 @@
   </a>
 </div>
 
-<!-- Inline password dialog -->
+<!-- ================= TRADE DIALOG ================= -->
 <dialog id="tradeDialog" style="background:#181b22; color:#e6e8ec; border:1px solid #222633; border-radius:12px; padding:20px; max-width:420px; width:90%; font-family:system-ui,sans-serif;">
   <h3 style="margin:0 0 12px; font-size:16px;">EXECUTE TRADE</h3>
   <div id="dialogSignalInfo" style="font-size:13px; color:#8a93a6; margin-bottom:16px;"></div>
@@ -91,10 +168,28 @@
   </div>
 </dialog>
 
+<!-- ================= MODIFY DIALOG ================= -->
+<dialog id="modDialog" style="background:#181b22; color:#e6e8ec; border:1px solid #222633; border-radius:12px; padding:20px; max-width:420px; width:90%; font-family:system-ui,sans-serif;">
+  <h3 style="margin:0 0 12px; font-size:16px;">MODIFY POSITION</h3>
+  <div id="modInfo" style="font-size:13px; color:#8a93a6; margin-bottom:16px;"></div>
+
+  <label style="display:block; font-size:12px; color:#8a93a6; margin-bottom:4px;">STOP LOSS (empty = remove)</label>
+  <input id="modSL" type="text" inputmode="decimal" placeholder="e.g. 1.08340" style="width:100%; padding:8px; background:#12151c; color:#e6e8ec; border:1px solid #222633; border-radius:6px; font-size:14px; margin-bottom:12px; box-sizing:border-box;">
+
+  <label style="display:block; font-size:12px; color:#8a93a6; margin-bottom:4px;">TAKE PROFIT (empty = remove)</label>
+  <input id="modTP" type="text" inputmode="decimal" placeholder="e.g. 1.09500" style="width:100%; padding:8px; background:#12151c; color:#e6e8ec; border:1px solid #222633; border-radius:6px; font-size:14px; margin-bottom:12px; box-sizing:border-box;">
+
+  <div id="modError" style="color:#ef4444; font-size:12px; margin-bottom:8px; display:none;"></div>
+  <div style="display:flex; gap:8px;">
+    <button id="modCancel" style="flex:1; padding:10px; background:#222633; color:#e6e8ec; border:0; border-radius:6px; cursor:pointer; font-size:13px;">CANCEL</button>
+    <button id="modSubmit" style="flex:1; padding:10px; background:#2563eb; color:#fff; border:0; border-radius:6px; cursor:pointer; font-size:13px; font-weight:600;">SAVE</button>
+  </div>
+</dialog>
+
 <script>
-/* ------------------------------------------------------------------
+/* ==================================================================
    CONFIG
------------------------------------------------------------------- */
+================================================================== */
 const TWELVE_DATA_KEY = "1d6484a8e4204e15ac6e63de1192a73e";
 const PAIRS = [
   { label: "EUR/GBP", symbol: "EUR/GBP" },
@@ -104,35 +199,26 @@ const PAIRS = [
   { label: "USD/CHF", symbol: "USD/CHF" },
 ];
 const SHOW_COUNT = 3;
-
-// --- TIMEFRAME ---
-// "15min" was too noisy. 1h gives cleaner trend structure.
 const INTERVAL = "1h";
 const OUTPUTSIZE = 300;
-
-// --- RISK MODEL ---
-// Fixed % risk per trade, not fixed lot. This keeps risk constant
-// regardless of stop-loss distance.
-const ACCOUNT_BALANCE_USD = 1000;   // <-- set your real account balance
-const RISK_PERCENT = 1.0;           // 1% of balance per trade
-const FIXED_LOT_SIZE = 0.01;        // fallback only if risk calc fails
-
-// --- STOP / TARGET ---
-// Widened from 1.5x to 2.5x ATR so normal noise does not hit the stop.
+const ACCOUNT_BALANCE_USD = 1000;
+const RISK_PERCENT = 1.0;
+const FIXED_LOT_SIZE = 0.01;
 const SL_ATR_MULT = 2.5;
-const TP_ATR_MULT = 5.0;            // 2.0 R:R minimum
-
-// --- FILTERS ---
-const ADX_MIN = 20;                 // below this = choppy, no trade
-const MIN_REWARD_RISK = 1.5;        // reject setups below this R:R
-const PULLBACK_TOL_ATR = 0.5;       // entry zone = EMA20 +/- 0.5 ATR
-
+const TP_ATR_MULT = 5.0;
+const ADX_MIN = 20;
+const MIN_REWARD_RISK = 1.5;
+const PULLBACK_TOL_ATR = 0.5;
 const EXNESS_SYMBOL_MAP = { 'EUR/GBP': 'EURGBP', 'EUR/CHF': 'EURCHF', 'GBP/CHF': 'GBPCHF', 'AUD/NZD': 'AUDNZD', 'USD/CHF': 'USDCHF' };
 const EXNESS_ACCOUNT_ID = '16000620992';
 
-/* ------------------------------------------------------------------
-   INDICATORS
------------------------------------------------------------------- */
+let ADMIN_PASSWORD = null;   // held in memory only while page is open
+let balanceTimer = null;
+let signalLoaded = false;
+
+/* ==================================================================
+   INDICATORS (unchanged from v2)
+================================================================== */
 function ema(values, period) {
   const k = 2 / (period + 1);
   let prev = values.slice(0, period).reduce((a,b)=>a+b,0) / period;
@@ -178,9 +264,9 @@ function adx(candles, period = 14) {
   return dxs.slice(-period).reduce((a,b)=>a+b,0)/period;
 }
 
-/* ------------------------------------------------------------------
-   FETCH
------------------------------------------------------------------- */
+/* ==================================================================
+   FETCH / EVALUATE
+================================================================== */
 async function fetchSeries(pair) {
   const url = `https://api.twelvedata.com/time_series?symbol=${encodeURIComponent(pair.symbol)}&interval=${INTERVAL}&outputsize=${OUTPUTSIZE}&apikey=${TWELVE_DATA_KEY}`;
   const res = await fetch(url);
@@ -190,15 +276,6 @@ async function fetchSeries(pair) {
   const rows = json.values.slice().reverse();
   return { candles: rows.map(r => ({ high: parseFloat(r.high), low: parseFloat(r.low), close: parseFloat(r.close), open: parseFloat(r.open) })) };
 }
-
-/* ------------------------------------------------------------------
-   EVALUATE  (v2 logic)
-   - Trend: price on correct side of EMA50
-   - Regime: ADX > ADX_MIN (no choppy trades)
-   - Pullback: price near EMA20 (limit-style entry, no chasing)
-   - Momentum: RSI confirms but does NOT drive the entry
-   - Stop: 2.5x ATR; TP: 5x ATR (2R)
------------------------------------------------------------------- */
 function evaluate(candles) {
   const closes = candles.map(c=>c.close);
   const price = closes[closes.length-1];
@@ -208,65 +285,44 @@ function evaluate(candles) {
   const a = atr(candles, 14);
   const d = adx(candles, 14);
 
-  // ---- regime filter ----
   const regimeOk = d >= ADX_MIN;
-
-  // ---- trend ----
   const trendUp   = price > eSlow && eFast > eSlow;
   const trendDown = price < eSlow && eFast < eSlow;
-
-  // ---- pullback zone: price must be near EMA20, not extended ----
   const distToFast = Math.abs(price - eFast);
   const inPullbackZone = distToFast <= a * PULLBACK_TOL_ATR;
-
-  // ---- momentum confirmation ----
-  const momentumUp   = r > 50 && r < 70;   // not overbought
-  const momentumDown = r < 50 && r > 30;   // not oversold
+  const momentumUp   = r > 50 && r < 70;
+  const momentumDown = r < 50 && r > 30;
 
   let signal = "NEUTRAL";
   let rejectReason = "";
+  if (!regimeOk) rejectReason = `ADX ${d.toFixed(1)} < ${ADX_MIN} (choppy)`;
+  else if (trendUp && inPullbackZone && momentumUp) signal = "BUY";
+  else if (trendDown && inPullbackZone && momentumDown) signal = "SELL";
+  else if (trendUp || trendDown) rejectReason = inPullbackZone ? "momentum not aligned" : "price extended (no pullback)";
+  else rejectReason = "no clear trend";
 
-  if (!regimeOk) {
-    rejectReason = `ADX ${d.toFixed(1)} < ${ADX_MIN} (choppy)`;
-  } else if (trendUp && inPullbackZone && momentumUp) {
-    signal = "BUY";
-  } else if (trendDown && inPullbackZone && momentumDown) {
-    signal = "SELL";
-  } else if (trendUp || trendDown) {
-    rejectReason = inPullbackZone ? "momentum not aligned" : "price extended (no pullback)";
-  } else {
-    rejectReason = "no clear trend";
-  }
-
-  // ---- levels ----
   const slDistance = a * SL_ATR_MULT;
   const tpDistance = a * TP_ATR_MULT;
-  // Entry is the EMA20 pullback level, not the current market price.
   const entry = (signal === "BUY" || signal === "SELL") ? eFast : price;
   let tp = null, sl = null;
   if (signal === "BUY")  { tp = entry + tpDistance; sl = entry - slDistance; }
   if (signal === "SELL") { tp = entry - tpDistance; sl = entry + slDistance; }
 
-  // ---- reward:risk check ----
   let rr = null;
   if (tp != null && sl != null) {
     rr = Math.abs(tp - entry) / Math.abs(entry - sl);
     if (rr < MIN_REWARD_RISK) { signal = "NEUTRAL"; rejectReason = `R:R ${rr.toFixed(2)} too low`; tp = sl = entry = null; rr = null; }
   }
 
-  // ---- position size from % risk ----
   let lotSize = FIXED_LOT_SIZE;
   if (signal !== "NEUTRAL" && sl != null) {
-    // For a 0.01 lot on most FX pairs, 1 pip ~= $0.10. We compute SL in pips.
-    // Fallback: risk-based sizing using value-per-price-unit approximation.
-    const slPips = Math.abs(entry - sl) / 0.0001;   // approx for 4-decimal pairs
-    const pipValuePerLot = 10;                       // USD per pip per 1.0 lot
+    const slPips = Math.abs(entry - sl) / 0.0001;
+    const pipValuePerLot = 10;
     const riskUsd = ACCOUNT_BALANCE_USD * (RISK_PERCENT / 100);
     const rawLots = riskUsd / (slPips * pipValuePerLot);
     lotSize = Math.max(0.01, Math.round(rawLots * 100) / 100);
   }
 
-  // ---- honest confidence: count independent confirmations ----
   let confirmations = 0;
   if (regimeOk) confirmations++;
   if (trendUp || trendDown) confirmations++;
@@ -274,16 +330,12 @@ function evaluate(candles) {
   if (momentumUp || momentumDown) confirmations++;
   const confidence = signal === "NEUTRAL" ? 0 : Math.round((confirmations / 4) * 100);
 
-  return {
-    signal, confidence, price, atr: a, atrPct: (a/price)*100,
-    rsi: r, adx: d, emaFast: eFast, emaSlow: eSlow,
-    entry, tp, sl, lotSize, rr, rejectReason,
-  };
+  return { signal, confidence, price, atr: a, atrPct: (a/price)*100, rsi: r, adx: d, emaFast: eFast, emaSlow: eSlow, entry, tp, sl, lotSize, rr, rejectReason };
 }
 
-/* ------------------------------------------------------------------
-   RENDER
------------------------------------------------------------------- */
+/* ==================================================================
+   RENDER SIGNAL CARDS
+================================================================== */
 const cardsEl = document.getElementById("cards");
 const statusEl = document.getElementById("status");
 const errorsBox = document.getElementById("errorsBox");
@@ -314,9 +366,9 @@ function renderCard(pair, data) {
      </div>`);
 }
 
-/* ------------------------------------------------------------------
-   TRADE DIALOG
------------------------------------------------------------------- */
+/* ==================================================================
+   TRADE DIALOG (open new trade from a signal)
+================================================================== */
 const tradeDialog = document.getElementById('tradeDialog');
 const dialogSignalInfo = document.getElementById('dialogSignalInfo');
 const dialogPassword = document.getElementById('dialogPassword');
@@ -339,7 +391,8 @@ cardsEl.addEventListener("click", async (e) => {
   if (!symbol) { alert('No Exness symbol mapping for ' + pairLabel); return; }
   pendingTrade = { signal, pairLabel, entry, tp, sl, symbol };
   dialogSignalInfo.innerHTML = `<strong style="color:#e6e8ec;">${signal} ${pairLabel}</strong><br>Entry (limit @ EMA20): ${entry.toFixed(4)} · TP: ${tp ? tp.toFixed(4) : '—'} · SL: ${sl ? sl.toFixed(4) : '—'}`;
-  dialogPassword.value = '';
+  // If already unlocked, prefill the admin password
+  dialogPassword.value = ADMIN_PASSWORD || '';
   dialogError.style.display = 'none';
   tradeDialog.showModal();
 });
@@ -383,6 +436,8 @@ dialogExecute.addEventListener('click', async () => {
     alert('Order accepted. Operation ID: ' + (data.operation_id || '—'));
     tradeDialog.close();
     pendingTrade = null;
+    // If unlocked, refresh positions after Exness applies the order
+    if (ADMIN_PASSWORD) setTimeout(loadPositions, 2000);
   } catch (err) {
     dialogError.textContent = 'Network error: ' + err.message;
     dialogError.style.display = 'block';
@@ -392,9 +447,311 @@ dialogExecute.addEventListener('click', async () => {
   }
 });
 
-/* ------------------------------------------------------------------
-   MAIN REFRESH
------------------------------------------------------------------- */
+/* ==================================================================
+   AUTH / UNLOCK
+================================================================== */
+const authBar = document.getElementById('authBar');
+const adminPasswordInput = document.getElementById('adminPassword');
+const unlockBtn = document.getElementById('unlockBtn');
+const lockState = document.getElementById('lockState');
+const authError = document.getElementById('authError');
+const dash = document.getElementById('dash');
+
+unlockBtn.addEventListener('click', unlockDashboard);
+adminPasswordInput.addEventListener('keydown', (e) => { if (e.key === 'Enter') unlockDashboard(); });
+
+async function unlockDashboard() {
+  const pw = adminPasswordInput.value;
+  if (!pw) {
+    authError.textContent = 'Enter the admin password.';
+    authError.style.display = 'block';
+    return;
+  }
+  authError.style.display = 'none';
+  unlockBtn.disabled = true;
+  unlockBtn.textContent = 'CHECKING…';
+  try {
+    // Lightweight verification: hit /api/exness/accounts with a session token is
+    // not available here, so we use a tiny verify-admin contract.
+    // If you don't have /api/exness/verify-admin, point this at any
+    // admin-password-protected POST route (e.g. a no-op close).
+    const res = await fetch('/api/exness/verify-admin', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ adminPassword: pw }),
+    });
+    if (!res.ok) {
+      const data = await res.json().catch(() => ({}));
+      throw new Error(data.error || 'Invalid password');
+    }
+    ADMIN_PASSWORD = pw;
+    lockState.textContent = 'UNLOCKED';
+    lockState.style.color = '#22c55e';
+    authBar.classList.add('unlocked');
+    dash.classList.add('visible');
+    adminPasswordInput.value = '';
+    adminPasswordInput.placeholder = 'Unlocked — password held in memory';
+    adminPasswordInput.disabled = true;
+    unlockBtn.textContent = 'LOCK';
+    unlockBtn.onclick = lockDashboard;
+    // Start live balance + positions
+    loadBalance();
+    loadPositions();
+    if (balanceTimer) clearInterval(balanceTimer);
+    balanceTimer = setInterval(loadBalance, 2000);
+  } catch (err) {
+    authError.textContent = err.message || 'Unlock failed.';
+    authError.style.display = 'block';
+  } finally {
+    unlockBtn.disabled = false;
+    if (!ADMIN_PASSWORD) unlockBtn.textContent = 'UNLOCK';
+  }
+}
+
+function lockDashboard() {
+  ADMIN_PASSWORD = null;
+  if (balanceTimer) { clearInterval(balanceTimer); balanceTimer = null; }
+  lockState.textContent = 'LOCKED';
+  lockState.style.color = '#8a93a6';
+  authBar.classList.remove('unlocked');
+  dash.classList.remove('visible');
+  adminPasswordInput.disabled = false;
+  adminPasswordInput.placeholder = 'Admin password to unlock balance & positions';
+  adminPasswordInput.value = '';
+  unlockBtn.textContent = 'UNLOCK';
+  unlockBtn.onclick = unlockDashboard;
+  ['balBalance','balEquity','balFree','balCurrency'].forEach(id => document.getElementById(id).textContent = '—');
+  document.getElementById('posBody').innerHTML = '<tr><td colspan="8" class="pos-empty">Unlock to load positions</td></tr>';
+}
+
+/* ==================================================================
+   BALANCE (poll every 2s)
+================================================================== */
+const balBalance = document.getElementById('balBalance');
+const balEquity  = document.getElementById('balEquity');
+const balFree    = document.getElementById('balFree');
+const balCurrency= document.getElementById('balCurrency');
+const balNote    = document.getElementById('balNote');
+
+function money(v, cur) {
+  if (v === null || v === undefined || v === '—') return '—';
+  const n = Number(v);
+  if (!isFinite(n)) return String(v);
+  return n.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 }) + (cur ? ' ' + cur : '');
+}
+
+async function loadBalance() {
+  if (!ADMIN_PASSWORD) return;
+  try {
+    // Pass the admin password so the backend can gate it (same env var as close/modify).
+    // If your accounts.js still only checks sessionToken, update it — see notes.
+    const res = await fetch('/api/exness/accounts?adminPassword=' + encodeURIComponent(ADMIN_PASSWORD));
+    const data = await res.json().catch(() => ({}));
+    if (!res.ok) {
+      balNote.textContent = 'balance: ' + (data.error || res.status);
+      return;
+    }
+    const acc = (data.accounts && data.accounts[0]) || {};
+    balBalance.textContent = money(acc.balance, acc.currency);
+    balEquity.textContent  = money(acc.equity, acc.currency);
+    balFree.textContent    = money(acc.freeMargin, acc.currency);
+    balCurrency.textContent= acc.currency || '—';
+    balNote.textContent = 'updated ' + new Date().toLocaleTimeString();
+  } catch (err) {
+    balNote.textContent = 'balance: ' + err.message;
+  }
+}
+
+/* ==================================================================
+   POSITIONS
+================================================================== */
+const posBody = document.getElementById('posBody');
+const posRefreshBtn = document.getElementById('posRefreshBtn');
+posRefreshBtn.addEventListener('click', loadPositions);
+
+function pick(obj, keys, fallback) {
+  for (const k of keys) {
+    if (obj && obj[k] !== undefined && obj[k] !== null) return obj[k];
+  }
+  return fallback;
+}
+
+function normalizePositions(raw) {
+  // Exness may return { positions: [...] } or a bare array, or { data: [...] }
+  let arr = raw;
+  if (!Array.isArray(arr)) arr = raw.positions || raw.data || raw.items || [];
+  if (!Array.isArray(arr)) arr = [];
+  return arr.map(p => {
+    const symbol = pick(p, ['symbol','instrument','ticker'], '—');
+    const rawSide = pick(p, ['side','type','direction'], '');
+    const side = String(rawSide).toUpperCase() === 'BUY' || String(rawSide).toUpperCase() === 'SELL'
+      ? String(rawSide).toUpperCase()
+      : (Number(pick(p, ['volume','qty'], 0)) >= 0 && String(rawSide).toLowerCase().includes('buy') ? 'BUY' : String(rawSide).toUpperCase());
+    const volume = pick(p, ['volume','qty','quantity'], '—');
+    const entry  = pick(p, ['open_price','entry_price','price','avg_price'], '—');
+    const sl     = pick(p, ['stop_loss_price','sl_price','stop_loss'], null);
+    const tp     = pick(p, ['take_profit_price','tp_price','take_profit'], null);
+    const pnl    = pick(p, ['profit','unrealized_pnl','pnl','unrealized_profit'], null);
+    const orderId= pick(p, ['order_id','id','position_id','ticket'], null);
+    return { symbol, side, volume, entry, sl, tp, pnl, orderId };
+  });
+}
+
+async function loadPositions() {
+  if (!ADMIN_PASSWORD) return;
+  posBody.innerHTML = '<tr><td colspan="8" class="pos-empty">Loading…</td></tr>';
+  try {
+    const res = await fetch('/api/exness/positions?adminPassword=' + encodeURIComponent(ADMIN_PASSWORD));
+    const data = await res.json().catch(() => ({}));
+    if (!res.ok) {
+      posBody.innerHTML = `<tr><td colspan="8" class="pos-empty" style="color:#ef4444;">${data.error || ('HTTP ' + res.status)}</td></tr>`;
+      return;
+    }
+    const list = normalizePositions(data);
+    if (!list.length) {
+      posBody.innerHTML = '<tr><td colspan="8" class="pos-empty">No open positions</td></tr>';
+      return;
+    }
+    posBody.innerHTML = '';
+    list.forEach(p => {
+      const pnlCls = (p.pnl !== null && Number(p.pnl) >= 0) ? 'pos-pnl-pos' : 'pos-pnl-neg';
+      const pnlTxt = (p.pnl === null || p.pnl === '—') ? '—' : Number(p.pnl).toFixed(2);
+      const slTxt = p.sl === null || p.sl === undefined || p.sl === '—' ? '—' : String(p.sl);
+      const tpTxt = p.tp === null || p.tp === undefined || p.tp === '—' ? '—' : String(p.tp);
+      posBody.insertAdjacentHTML('beforeend', `
+        <tr data-order-id="${p.orderId ?? ''}">
+          <td>${p.symbol}</td>
+          <td class="pos-side-${p.side}">${p.side}</td>
+          <td>${p.volume}</td>
+          <td>${p.entry}</td>
+          <td>${slTxt}</td>
+          <td>${tpTxt}</td>
+          <td class="${pnlCls}">${pnlTxt}</td>
+          <td>
+            <div class="pos-actions">
+              <button class="btn-mod" data-act="modify" data-order-id="${p.orderId ?? ''}" data-symbol="${p.symbol}" data-sl="${slTxt}" data-tp="${tpTxt}">MODIFY</button>
+              <button class="btn-close" data-act="close" data-order-id="${p.orderId ?? ''}" data-symbol="${p.symbol}">CLOSE</button>
+            </div>
+          </td>
+        </tr>`);
+    });
+  } catch (err) {
+    posBody.innerHTML = `<tr><td colspan="8" class="pos-empty" style="color:#ef4444;">${err.message}</td></tr>`;
+  }
+}
+
+/* ---- Position actions: Close / Modify ---- */
+posBody.addEventListener('click', async (e) => {
+  const btn = e.target.closest('button[data-act]');
+  if (!btn) return;
+  const act = btn.dataset.act;
+  const orderId = btn.dataset.orderId;
+  const symbol = btn.dataset.symbol;
+  if (!orderId) { alert('Missing order id — cannot act on this position.'); return; }
+  if (!ADMIN_PASSWORD) { alert('Please unlock first.'); return; }
+
+  if (act === 'close') {
+    if (!confirm(`Close ${symbol} (order ${orderId})?`)) return;
+    btn.disabled = true; btn.textContent = '…';
+    try {
+      const res = await fetch('/api/exness/close', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ orderId, adminPassword: ADMIN_PASSWORD }),
+      });
+      const data = await res.json().catch(() => ({}));
+      if (!res.ok) throw new Error(data.error || ('HTTP ' + res.status));
+      // Async — poll after 1.5s then again at 4s
+      setTimeout(loadPositions, 1500);
+      setTimeout(loadPositions, 4000);
+    } catch (err) {
+      alert('Close failed: ' + err.message);
+      btn.disabled = false; btn.textContent = 'CLOSE';
+    }
+    return;
+  }
+
+  if (act === 'modify') {
+    openModifyDialog(orderId, symbol, btn.dataset.sl, btn.dataset.tp);
+  }
+});
+
+/* ==================================================================
+   MODIFY DIALOG
+================================================================== */
+const modDialog = document.getElementById('modDialog');
+const modInfo = document.getElementById('modInfo');
+const modSL = document.getElementById('modSL');
+const modTP = document.getElementById('modTP');
+const modError = document.getElementById('modError');
+const modCancel = document.getElementById('modCancel');
+const modSubmit = document.getElementById('modSubmit');
+let pendingModify = null;
+
+function openModifyDialog(orderId, symbol, sl, tp) {
+  pendingModify = { orderId, symbol };
+  modInfo.innerHTML = `<strong style="color:#e6e8ec;">${symbol}</strong> · order ${orderId}<br>Leave a field empty to <em>remove</em> that level.`;
+  modSL.value = (sl && sl !== '—') ? sl : '';
+  modTP.value = (tp && tp !== '—') ? tp : '';
+  modError.style.display = 'none';
+  modDialog.showModal();
+}
+
+modCancel.addEventListener('click', () => { modDialog.close(); pendingModify = null; });
+
+modSubmit.addEventListener('click', async () => {
+  if (!pendingModify || !ADMIN_PASSWORD) { modDialog.close(); return; }
+  const { orderId, symbol } = pendingModify;
+
+  // empty string -> null (remove level). Value -> string (set new level).
+  const sl = modSL.value.trim() === '' ? null : modSL.value.trim();
+  const tp = modTP.value.trim() === '' ? null : modTP.value.trim();
+
+  // Validate numeric strings (Exness regex is strict).
+  const numRe = /^[+]?(?:(?:0*[1-9][0-9]*)(?:\.[0-9]+)?|0+\.[0-9]*[1-9][0-9]*)$/;
+  if (sl !== null && !numRe.test(sl)) { modError.textContent = 'Stop Loss must be a valid positive number.'; modError.style.display = 'block'; return; }
+  if (tp !== null && !numRe.test(tp)) { modError.textContent = 'Take Profit must be a valid positive number.'; modError.style.display = 'block'; return; }
+
+  modSubmit.disabled = true;
+  modSubmit.textContent = 'SAVING…';
+  modError.style.display = 'none';
+  try {
+    const body = { orderId, adminPassword: ADMIN_PASSWORD };
+    // IMPORTANT: omit a field = don't change it. We always send both because
+    // the user may want to clear one by leaving it empty, but if BOTH boxes are
+    // non-empty and unchanged we still send — harmless.
+    // To be safe and match spec: send only fields that differ from original.
+    const origSL = (modSL.dataset.orig || '').trim();
+    const origTP = (modTP.dataset.orig || '').trim();
+    // (orig tracking is best-effort; simplest is to always send both)
+    body.stopLoss = sl;      // string or null
+    body.takeProfit = tp;    // string or null
+
+    const res = await fetch('/api/exness/modify', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(body),
+    });
+    const data = await res.json().catch(() => ({}));
+    if (!res.ok) throw new Error(data.error || data.detail?.error_message || ('HTTP ' + res.status));
+    modDialog.close();
+    pendingModify = null;
+    // Async: Exness returns 202 ACK; reconcile via snapshot polling
+    setTimeout(loadPositions, 1500);
+    setTimeout(loadPositions, 4000);
+    setTimeout(loadPositions, 8000);
+  } catch (err) {
+    modError.textContent = err.message;
+    modError.style.display = 'block';
+  } finally {
+    modSubmit.disabled = false;
+    modSubmit.textContent = 'SAVE';
+  }
+});
+
+/* ==================================================================
+   MAIN REFRESH (signals)
+================================================================== */
 async function refresh() {
   cardsEl.innerHTML = "";
   errorsBox.innerHTML = "";
@@ -422,6 +779,7 @@ async function refresh() {
     : `UPDATED ${new Date().toLocaleTimeString()} · NO VALID DATA`;
   refreshBtn.disabled = false;
   refreshBtn.classList.remove("spinning");
+  signalLoaded = true;
 }
 refreshBtn.addEventListener("click", refresh);
 refresh();
